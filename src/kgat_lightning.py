@@ -287,23 +287,8 @@ class KGATLightning(pl.LightningModule):
         return dcg / idcg if idcg > 0 else 0.0
     
     def configure_optimizers(self):
-        # DDP를 위해 GPU 수에 따라 학습률 스케일링
-        effective_lr = self.lr
-        if hasattr(self, 'trainer') and hasattr(self.trainer, 'world_size') and self.trainer.world_size > 1:
-            # 분산 학습을 위한 선형 스케일링 규칙
-            # 효과적인 배치 크기에 따라 스케일링
-            # 주의: 매우 큰 배치 크기에서는 sqrt 스케일링이 더 나을 수 있음
-            effective_batch_size = self.hparams.config.batch_size * self.trainer.world_size
-            if effective_batch_size > 4096:
-                # 큰 배치에는 sqrt 스케일링 사용
-                effective_lr = self.lr * np.sqrt(self.trainer.world_size)
-                print(f"{self.trainer.world_size} GPU용으로 학습률을 {self.lr}에서 {effective_lr}로 sqrt 스케일링")
-            else:
-                # 작은 배치에는 선형 스케일링 사용
-                effective_lr = self.lr * self.trainer.world_size
-                print(f"{self.trainer.world_size} GPU용으로 학습률을 {self.lr}에서 {effective_lr}로 선형 스케일링")
-        
-        optimizer = torch.optim.Adam(self.parameters(), lr=effective_lr)
+        # 기본 학습률 사용
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='max', factor=0.5, patience=5
         )
