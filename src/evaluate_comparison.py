@@ -30,12 +30,30 @@ def load_trained_model(checkpoint_path, config_path):
     config.model.n_entities = stats['n_entities']
     config.model.n_relations = stats['n_relations']
     
-    # Load model
-    model = KGATLightning.load_from_checkpoint(
-        checkpoint_path,
-        config=config.model,
-        map_location='cpu'
-    )
+    # Load model with compatibility handling
+    try:
+        # Try loading normally
+        model = KGATLightning.load_from_checkpoint(
+            checkpoint_path,
+            config=config.model,
+            map_location='cpu'
+        )
+    except RuntimeError as e:
+        if "relation_embedding" in str(e):
+            # Handle old checkpoints with relation_embedding
+            print("검출된 이전 버전 체크포인트, 호환성 모드로 로딩...")
+            model = KGATLightning(config.model)
+            checkpoint = torch.load(checkpoint_path, map_location='cpu')
+            state_dict = checkpoint['state_dict']
+            
+            # Remove relation_embedding from state dict if present
+            state_dict = {k: v for k, v in state_dict.items() 
+                         if 'relation_embedding' not in k}
+            
+            # Load the filtered state dict
+            model.load_state_dict(state_dict, strict=False)
+        else:
+            raise e
     
     return model, data_module
 

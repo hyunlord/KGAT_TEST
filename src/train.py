@@ -103,7 +103,6 @@ def train(cfg: DictConfig):
         'max_epochs': cfg.training.max_epochs,
         'accelerator': cfg.training.accelerator,
         'devices': cfg.training.devices,
-        'strategy': cfg.training.get('strategy', 'auto'),
         'callbacks': callbacks,
         'logger': logger,
         'gradient_clip_val': cfg.training.gradient_clip_val,
@@ -113,6 +112,14 @@ def train(cfg: DictConfig):
         'sync_batchnorm': cfg.training.get('sync_batchnorm', False),
         'deterministic': True
     }
+    
+    # strategy 처리 - DDP의 경우 find_unused_parameters 설정
+    strategy = cfg.training.get('strategy', 'auto')
+    if strategy == 'ddp':
+        from pytorch_lightning.strategies import DDPStrategy
+        trainer_kwargs['strategy'] = DDPStrategy(find_unused_parameters=True)
+    else:
+        trainer_kwargs['strategy'] = strategy
     
     # precision 파라미터 처리 (문자열로 변환)
     precision = cfg.training.precision

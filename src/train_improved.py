@@ -120,21 +120,30 @@ def train(cfg: DictConfig):
         version=timestamp
     )
     
-    # Create trainer
-    trainer = pl.Trainer(
-        max_epochs=cfg.training.max_epochs,
-        accelerator=cfg.training.accelerator,
-        devices=cfg.training.devices,
-        strategy=cfg.training.strategy,
-        precision=cfg.training.precision,
-        gradient_clip_val=cfg.training.gradient_clip_val,
-        accumulate_grad_batches=cfg.training.accumulate_grad_batches,
-        check_val_every_n_epoch=cfg.training.check_val_every_n_epoch,
-        log_every_n_steps=cfg.training.log_every_n_steps,
-        callbacks=[checkpoint_callback, early_stopping, progress_bar, metrics_callback],
-        logger=logger,
-        deterministic=True
-    )
+    # Create trainer with strategy handling
+    trainer_kwargs = {
+        'max_epochs': cfg.training.max_epochs,
+        'accelerator': cfg.training.accelerator,
+        'devices': cfg.training.devices,
+        'precision': cfg.training.precision,
+        'gradient_clip_val': cfg.training.gradient_clip_val,
+        'accumulate_grad_batches': cfg.training.accumulate_grad_batches,
+        'check_val_every_n_epoch': cfg.training.check_val_every_n_epoch,
+        'log_every_n_steps': cfg.training.log_every_n_steps,
+        'callbacks': [checkpoint_callback, early_stopping, progress_bar, metrics_callback],
+        'logger': logger,
+        'deterministic': True
+    }
+    
+    # Handle strategy - use find_unused_parameters for DDP
+    strategy = cfg.training.get('strategy', 'auto')
+    if strategy == 'ddp':
+        from pytorch_lightning.strategies import DDPStrategy
+        trainer_kwargs['strategy'] = DDPStrategy(find_unused_parameters=True)
+    else:
+        trainer_kwargs['strategy'] = strategy
+    
+    trainer = pl.Trainer(**trainer_kwargs)
     
     # Start training
     print("\nStarting training...")

@@ -152,7 +152,7 @@ class KGATImproved(pl.LightningModule):
         # Embeddings
         self.user_embedding = nn.Embedding(self.n_users, self.embed_dim)
         self.entity_embedding = nn.Embedding(self.n_entities, self.embed_dim)
-        self.relation_embedding = nn.Embedding(self.n_relations, self.embed_dim)
+        # relation_embedding은 KGATConvImproved 내부에서 처리되므로 여기서는 제거
         
         # KGAT layers
         self.convs = nn.ModuleList()
@@ -180,7 +180,6 @@ class KGATImproved(pl.LightningModule):
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.user_embedding.weight)
         nn.init.xavier_uniform_(self.entity_embedding.weight)
-        nn.init.xavier_uniform_(self.relation_embedding.weight)
         nn.init.xavier_uniform_(self.transform.weight)
         
     def compute_edge_norm(self, edge_index, num_nodes):

@@ -83,7 +83,7 @@ class KGATLightning(pl.LightningModule):
         # 임베딩
         self.user_embedding = nn.Embedding(self.n_users, self.embed_dim)
         self.entity_embedding = nn.Embedding(self.n_entities, self.embed_dim)
-        self.relation_embedding = nn.Embedding(self.n_relations, self.embed_dim)
+        # relation_embedding은 KGATConv 내부에서 처리되므로 여기서는 제거
         
         # KGAT 레이어
         self.convs = nn.ModuleList()
@@ -104,7 +104,6 @@ class KGATLightning(pl.LightningModule):
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.user_embedding.weight)
         nn.init.xavier_uniform_(self.entity_embedding.weight)
-        nn.init.xavier_uniform_(self.relation_embedding.weight)
         
     def forward(self, edge_index_ui, edge_index_kg=None, edge_type_kg=None):
         # 모든 임베딩 가져오기

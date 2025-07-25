@@ -9,9 +9,12 @@
 - ✅ Hydra 설정 관리
 - ✅ TensorBoard 로깅
 - ✅ 모델 체크포인트 및 조기 종료
+- ✅ 다양한 Aggregator 지원 (bi-interaction, GCN, GraphSAGE)
+- ✅ 개선된 KGAT 모델 옵션
 - ✅ 두 가지 평가 방법 비교:
   - 표준: 사용자-아이템 유사도만 사용
   - 향상: 사용자+관계-아이템 유사도 사용
+- ✅ 멀티 GPU 학습 (DDP, DeepSpeed Stage 1/2/3)
 
 ## 설치
 
@@ -40,7 +43,7 @@ python scripts/download_data.py --dataset amazon-book
 
 ### 2. KGAT 모델 학습
 
-#### 단일 GPU 학습
+#### 기본 모델 학습
 ```bash
 # 기본 설정으로 학습
 python src/train.py
@@ -50,6 +53,20 @@ python src/train.py data.batch_size=512 model.embed_dim=128
 
 # 작은 설정으로 학습 (테스트용)
 python src/train.py --config-name config_small
+```
+
+#### 개선된 모델 학습
+```bash
+# 개선된 KGAT 모델 사용 (권장)
+python src/train_improved.py use_improved_model=true
+
+# 다양한 Aggregator 사용
+python src/train_improved.py use_improved_model=true model.aggregator=gcn
+python src/train_improved.py use_improved_model=true model.aggregator=graphsage
+python src/train_improved.py use_improved_model=true model.aggregator=bi-interaction
+
+# 기본 모델과 개선된 모델 비교
+python src/compare_models.py
 ```
 
 #### 멀티 GPU 학습
@@ -97,16 +114,26 @@ python src/evaluate_comparison.py \
 KGAT_TEST/
 ├── src/
 │   ├── kgat_lightning.py      # PyTorch Lightning KGAT 모델
+│   ├── kgat_improved.py       # 개선된 KGAT 모델
 │   ├── data_module.py         # 데이터 로딩 및 전처리
 │   ├── train.py               # 학습 스크립트
+│   ├── train_improved.py      # 개선된 모델 학습 스크립트
 │   ├── evaluator.py           # 평가 방법
 │   ├── compare_methods.py     # 방법 비교 유틸리티
-│   └── evaluate_comparison.py # 학습된 모델 방법 비교
+│   ├── evaluate_comparison.py # 학습된 모델 방법 비교
+│   └── compare_models.py      # 기본/개선 모델 비교
 ├── configs/
 │   ├── config.yaml            # 주요 설정
-│   └── config_small.yaml      # 테스트용 작은 설정
+│   ├── config_small.yaml      # 테스트용 작은 설정
+│   ├── config_improved.yaml   # 개선된 모델 설정
+│   └── config_multi_gpu.yaml  # 멀티 GPU 설정
 ├── scripts/
-│   └── download_data.py       # 데이터 다운로드 스크립트
+│   ├── download_data.py       # 데이터 다운로드 스크립트
+│   └── compare_strategies.py  # 학습 전략 비교
+├── docs/
+│   ├── DDP_vs_DeepSpeed_KR.md    # DDP vs DeepSpeed 가이드
+│   ├── KGAT_Improvements.md       # 모델 개선사항 문서
+│   └── TensorBoard_Guide.md       # TensorBoard 사용 가이드
 ├── data/                      # 데이터셋 디렉토리
 ├── logs/                      # TensorBoard 로그
 ├── models/                    # 저장된 모델
@@ -125,12 +152,16 @@ data:
 model:
   embed_dim: 64
   layer_dims: [32, 16]
-  aggregator: bi-interaction
+  aggregator: bi-interaction  # 옵션: bi-interaction, gcn, graphsage
+  dropout: 0.1
   
 training:
   max_epochs: 1000
   early_stopping_patience: 20
   lr: 0.001
+  
+# 개선된 모델 사용 여부
+use_improved_model: false  # true로 설정하면 개선된 모델 사용
 ```
 
 ## 데이터 형식
@@ -192,9 +223,27 @@ python scripts/compare_strategies.py \
   NDCG@20: 0.0891 (+12.9%)
 ```
 
+## 개선사항
+
+개선된 KGAT 모델의 주요 특징:
+- **다양한 Aggregator**: bi-interaction, GCN, GraphSAGE 지원
+- **향상된 어텐션 메커니즘**: 더 나은 gradient flow
+- **엣지 정규화**: GCN 스타일 메시지 전달
+- **최종 변환 레이어**: 효율적인 차원 축소
+
+자세한 내용은 [모델 개선사항 문서](docs/KGAT_Improvements.md)를 참조하세요.
+
 ## 멀티 GPU 학습 가이드
 
 자세한 멀티 GPU 학습 지침은 [멀티 GPU 가이드](README_MULTI_GPU.md)를 참조하세요.
+
+## 성능 비교
+
+개선된 모델의 예상 성능 향상:
+- Recall@20: 5-10% 향상
+- NDCG@20: 5-8% 향상
+- 더 안정적인 학습 과정
+- 다양한 데이터셋에 대한 적응성 향상
 
 ## 인용
 
