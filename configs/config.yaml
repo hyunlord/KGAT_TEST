@@ -26,7 +26,8 @@ training:
   early_stopping_patience: 20
   seed: 42
   accelerator: auto  # auto, gpu, cpu
-  devices: 1
+  devices: 1  # Number of GPUs to use (1 for single, -1 for all available)
+  strategy: auto  # auto, ddp, ddp_spawn, deepspeed, etc.
   precision: 16  # 16 for mixed precision, 32 for full precision
   gradient_clip_val: 5.0
   accumulate_grad_batches: 1

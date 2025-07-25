@@ -92,6 +92,7 @@ def train(cfg: DictConfig):
         max_epochs=cfg.training.max_epochs,
         accelerator=cfg.training.accelerator,
         devices=cfg.training.devices,
+        strategy=cfg.training.get('strategy', 'auto'),
         callbacks=callbacks,
         logger=logger,
         gradient_clip_val=cfg.training.gradient_clip_val,
@@ -99,6 +100,8 @@ def train(cfg: DictConfig):
         check_val_every_n_epoch=cfg.training.check_val_every_n_epoch,
         log_every_n_steps=cfg.training.log_every_n_steps,
         precision=cfg.training.precision,
+        sync_batchnorm=cfg.training.get('sync_batchnorm', False),
+        replace_sampler_ddp=cfg.training.get('replace_sampler_ddp', True),
         deterministic=True
     )
     

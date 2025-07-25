@@ -11,7 +11,28 @@ import urllib.request
 import zipfile
 import tarfile
 import shutil
+import gdown
 from tqdm import tqdm
+
+
+# Dataset URLs from KGAT repository
+DATASET_URLS = {
+    'amazon-book': {
+        'url': 'https://drive.google.com/uc?id=1qQxBE3N8Cx6KsLmQ8tqPceE8_5dYGLe2',
+        'file': 'amazon-book.zip',
+        'extract_dir': 'amazon-book'
+    },
+    'last-fm': {
+        'url': 'https://drive.google.com/uc?id=1GJW-4b0HqsXp1bVALKf7kdGwJ-JLPeNB',
+        'file': 'last-fm.zip', 
+        'extract_dir': 'last-fm'
+    },
+    'yelp2018': {
+        'url': 'https://drive.google.com/uc?id=1YGrI1q3uHaVuMEzE5hXJ23c1_jC-O9Dq',
+        'file': 'yelp2018.zip',
+        'extract_dir': 'yelp2018'
+    }
+}
 
 
 class DownloadProgressBar(tqdm):
@@ -19,6 +40,17 @@ class DownloadProgressBar(tqdm):
         if tsize is not None:
             self.total = tsize
         self.update(b * bsize - self.n)
+
+
+def download_from_google_drive(url, output_path):
+    """Download file from Google Drive"""
+    print(f"Downloading {output_path}...")
+    try:
+        gdown.download(url, output_path, quiet=False)
+        return True
+    except Exception as e:
+        print(f"Error downloading from Google Drive: {e}")
+        return False
 
 
 def download_url(url, output_path):
@@ -41,48 +73,128 @@ def extract_archive(file_path, extract_to='.'):
         raise ValueError(f"Unsupported archive format: {file_path}")
 
 
-def prepare_amazon_book():
-    """Download and prepare Amazon-Book dataset"""
-    # Note: You'll need to replace this with actual dataset URL
-    # This is a placeholder structure
-    data_dir = 'data/amazon-book'
-    os.makedirs(data_dir, exist_ok=True)
+def verify_dataset_files(data_dir):
+    """Verify that required files exist in the dataset directory"""
+    required_files = ['train.txt', 'test.txt', 'kg_final.txt']
+    missing_files = []
     
-    print("Amazon-Book dataset preparation")
-    print("Please download the dataset manually from:")
-    print("https://github.com/xiangwang1223/knowledge_graph_attention_network")
-    print(f"And extract it to: {data_dir}")
+    for file in required_files:
+        if not os.path.exists(os.path.join(data_dir, file)):
+            missing_files.append(file)
     
-    # Create sample data for testing
-    create_sample_data(data_dir)
+    if missing_files:
+        print(f"Warning: Missing required files in {data_dir}: {missing_files}")
+        return False
+    
+    return True
 
 
-def prepare_last_fm():
-    """Download and prepare Last-FM dataset"""
-    data_dir = 'data/last-fm'
-    os.makedirs(data_dir, exist_ok=True)
+def download_dataset(dataset_name):
+    """Download and extract a specific dataset"""
+    if dataset_name not in DATASET_URLS:
+        print(f"Unknown dataset: {dataset_name}")
+        return False
     
-    print("Last-FM dataset preparation")
-    print("Please download the dataset manually from:")
-    print("https://github.com/xiangwang1223/knowledge_graph_attention_network")
-    print(f"And extract it to: {data_dir}")
+    dataset_info = DATASET_URLS[dataset_name]
+    data_dir = os.path.join('data', dataset_name)
     
-    # Create sample data for testing
-    create_sample_data(data_dir)
+    # Check if dataset already exists
+    if os.path.exists(data_dir) and verify_dataset_files(data_dir):
+        print(f"Dataset {dataset_name} already exists and is complete.")
+        return True
+    
+    # Create data directory
+    os.makedirs('data', exist_ok=True)
+    
+    # Download dataset
+    zip_path = os.path.join('data', dataset_info['file'])
+    
+    print(f"\nDownloading {dataset_name} dataset...")
+    success = download_from_google_drive(dataset_info['url'], zip_path)
+    
+    if not success:
+        print(f"Failed to download {dataset_name}. Trying alternative method...")
+        # Alternative: provide manual download instructions
+        print(f"\nPlease download manually from:")
+        print(f"URL: {dataset_info['url']}")
+        print(f"Save to: {zip_path}")
+        return False
+    
+    # Extract dataset
+    try:
+        extract_archive(zip_path, 'data')
+        
+        # Clean up zip file
+        os.remove(zip_path)
+        
+        # Verify extraction
+        if verify_dataset_files(data_dir):
+            print(f"Successfully downloaded and extracted {dataset_name}")
+            
+            # Print dataset statistics
+            print_dataset_stats(data_dir)
+            return True
+        else:
+            print(f"Dataset extraction may have failed. Please check {data_dir}")
+            return False
+            
+    except Exception as e:
+        print(f"Error extracting dataset: {e}")
+        return False
 
 
-def prepare_yelp2018():
-    """Download and prepare Yelp2018 dataset"""
-    data_dir = 'data/yelp2018'
-    os.makedirs(data_dir, exist_ok=True)
+def print_dataset_stats(data_dir):
+    """Print basic statistics about the dataset"""
+    print(f"\nDataset statistics for {data_dir}:")
     
-    print("Yelp2018 dataset preparation")
-    print("Please download the dataset manually from:")
-    print("https://github.com/xiangwang1223/knowledge_graph_attention_network")
-    print(f"And extract it to: {data_dir}")
+    # Count users and items in train.txt
+    train_file = os.path.join(data_dir, 'train.txt')
+    if os.path.exists(train_file):
+        users = set()
+        items = set()
+        interactions = 0
+        
+        with open(train_file, 'r') as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) > 1:
+                    user = int(parts[0])
+                    user_items = [int(item) for item in parts[1:]]
+                    users.add(user)
+                    items.update(user_items)
+                    interactions += len(user_items)
+        
+        print(f"  Training: {len(users)} users, {len(items)} items, {interactions} interactions")
     
-    # Create sample data for testing
-    create_sample_data(data_dir)
+    # Count test interactions
+    test_file = os.path.join(data_dir, 'test.txt')
+    if os.path.exists(test_file):
+        test_users = 0
+        test_interactions = 0
+        
+        with open(test_file, 'r') as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) > 1:
+                    test_users += 1
+                    test_interactions += len(parts) - 1
+        
+        print(f"  Test: {test_users} users, {test_interactions} interactions")
+    
+    # Count KG triples
+    kg_file = os.path.join(data_dir, 'kg_final.txt')
+    if os.path.exists(kg_file):
+        kg_triples = 0
+        relations = set()
+        
+        with open(kg_file, 'r') as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) == 3:
+                    kg_triples += 1
+                    relations.add(int(parts[1]))
+        
+        print(f"  KG: {kg_triples} triples, {len(relations)} relation types")
 
 
 def create_sample_data(data_dir):
@@ -126,10 +238,7 @@ def create_sample_data(data_dir):
                 f.write(f"{head} {relation} {tail}\n")
     
     print(f"Sample data created successfully in {data_dir}")
-    print("Files created:")
-    print(f"  - train.txt: 100 users with training interactions")
-    print(f"  - test.txt: 100 users with test interactions")
-    print(f"  - kg_final.txt: Knowledge graph with item relations")
+    print_dataset_stats(data_dir)
 
 
 def main():
@@ -142,6 +251,14 @@ def main():
     
     args = parser.parse_args()
     
+    # Check if gdown is installed
+    try:
+        import gdown
+    except ImportError:
+        print("Error: gdown is required for downloading from Google Drive")
+        print("Please install it with: pip install gdown")
+        sys.exit(1)
+    
     # Create data directory
     os.makedirs('data', exist_ok=True)
     
@@ -152,20 +269,22 @@ def main():
             os.makedirs(data_dir, exist_ok=True)
             create_sample_data(data_dir)
     else:
-        if args.dataset == 'amazon-book' or args.dataset == 'all':
-            prepare_amazon_book()
+        # Download real datasets
+        datasets = ['amazon-book', 'last-fm', 'yelp2018'] if args.dataset == 'all' else [args.dataset]
         
-        if args.dataset == 'last-fm' or args.dataset == 'all':
-            prepare_last_fm()
+        success_count = 0
+        for dataset in datasets:
+            if download_dataset(dataset):
+                success_count += 1
+            print()  # Empty line between datasets
         
-        if args.dataset == 'yelp2018' or args.dataset == 'all':
-            prepare_yelp2018()
-    
-    print("\nDataset preparation completed!")
-    print("\nTo use a dataset, update the config.yaml file:")
-    print("  data.data_dir: data/<dataset-name>")
-    print("\nOr set environment variable:")
-    print("  export DATA_DIR=data/<dataset-name>")
+        print(f"\nDataset download completed! ({success_count}/{len(datasets)} successful)")
+        
+        if success_count > 0:
+            print("\nTo use a dataset, update the config.yaml file:")
+            print("  data.data_dir: data/<dataset-name>")
+            print("\nOr set environment variable:")
+            print("  export DATA_DIR=data/<dataset-name>")
 
 
 if __name__ == "__main__":

@@ -16,7 +16,14 @@ Knowledge Graph Attention Network (KGAT) implementation using PyTorch Lightning 
 ## Installation
 
 ```bash
+# Basic installation
 pip install -r requirements.txt
+
+# For DeepSpeed support (optional)
+pip install deepspeed
+
+# For GPU monitoring (optional)
+pip install gputil
 ```
 
 ## Quick Start
@@ -33,6 +40,7 @@ python scripts/download_data.py --dataset amazon-book
 
 ### 2. Train KGAT Model
 
+#### Single GPU Training
 ```bash
 # Train with default configuration
 python src/train.py
@@ -42,6 +50,36 @@ python src/train.py data.batch_size=512 model.embed_dim=128
 
 # Train with small configuration (for testing)
 python src/train.py --config-name config_small
+```
+
+#### Multi-GPU Training
+```bash
+# Use all available GPUs with DDP (Recommended)
+python src/train.py training.devices=-1 training.strategy=ddp
+
+# Use specific number of GPUs
+python src/train.py training.devices=4 training.strategy=ddp data.batch_size=4096
+
+# Use multi-GPU configuration file
+python src/train.py --config-name config_multi_gpu
+
+# Use DeepSpeed for better memory efficiency
+python src/train.py training.devices=-1 training.strategy=deepspeed_stage_2 training.precision=16
+```
+
+#### Full Training Example
+```bash
+# Download dataset first
+python scripts/download_data.py --dataset amazon-book
+
+# Train on Amazon-Book dataset with 4 GPUs
+python src/train.py \
+    data.data_dir=data/amazon-book \
+    data.batch_size=4096 \
+    training.devices=4 \
+    training.strategy=ddp \
+    training.precision=16 \
+    training.max_epochs=200
 ```
 
 ### 3. Evaluate and Compare Methods
@@ -111,6 +149,20 @@ tensorboard --logdir logs/
 # View at http://localhost:6006
 ```
 
+## Training Strategy Comparison
+
+### DDP vs DeepSpeed
+```bash
+# Compare different distributed training strategies
+python scripts/compare_strategies.py \
+    --data-dir data/amazon-book \
+    --devices 4 \
+    --batch-size 2048 \
+    --max-epochs 10
+```
+
+See [DDP vs DeepSpeed Guide](docs/DDP_vs_DeepSpeed.md) for detailed comparison.
+
 ## Results
 
 The comparison script generates:
@@ -130,6 +182,10 @@ Enhanced Method (User+Relation-Item Similarity):
   Precision@20: 0.0523 (+14.7%)
   NDCG@20: 0.0891 (+12.9%)
 ```
+
+## Multi-GPU Training Guide
+
+For detailed multi-GPU training instructions, see [Multi-GPU Guide](README_MULTI_GPU.md).
 
 ## Citation
 

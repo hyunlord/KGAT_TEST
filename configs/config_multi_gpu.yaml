@@ -1,0 +1,31 @@
+# Multi-GPU configuration for KGAT training
+
+defaults:
+  - config
+
+# Data configuration - larger batch size for multi-GPU
+data:
+  batch_size: 4096  # 1024 * 4 GPUs
+  num_workers: 16  # 4 workers per GPU
+
+# Training configuration for multi-GPU
+training:
+  accelerator: gpu
+  devices: -1  # Use all available GPUs
+  strategy: ddp  # Distributed Data Parallel
+  precision: 16  # Mixed precision for better performance
+  
+  # Sync batch norm for multi-GPU
+  sync_batchnorm: true
+  
+  # Find optimal batch size (optional)
+  auto_scale_batch_size: false
+  
+  # Gradient accumulation can help with memory
+  accumulate_grad_batches: 1
+  
+  # More frequent validation in multi-GPU setting
+  check_val_every_n_epoch: 2
+  
+  # DDP specific settings
+  replace_sampler_ddp: true  # Automatically handles distributed sampling

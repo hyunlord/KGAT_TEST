@@ -257,7 +257,14 @@ class KGATLightning(pl.LightningModule):
         return dcg / idcg if idcg > 0 else 0.0
     
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        # Scale learning rate by number of GPUs for DDP
+        effective_lr = self.lr
+        if self.trainer.world_size > 1:
+            # Linear scaling rule for distributed training
+            effective_lr = self.lr * self.trainer.world_size
+            print(f"Scaling learning rate from {self.lr} to {effective_lr} for {self.trainer.world_size} GPUs")
+        
+        optimizer = torch.optim.Adam(self.parameters(), lr=effective_lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode='max', factor=0.5, patience=5, verbose=True
         )
