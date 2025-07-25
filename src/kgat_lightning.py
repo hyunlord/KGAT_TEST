@@ -95,8 +95,8 @@ class KGATLightning(pl.LightningModule):
             )
             in_dim = out_dim
             
-        # 최종 차원
-        self.final_dim = self.layer_dims[-1] if self.layer_dims else self.embed_dim
+        # 최종 차원: 초기 임베딩 + 모든 레이어의 출력 차원
+        self.final_dim = self.embed_dim + sum(self.layer_dims)
         
         # 임베딩 초기화
         self.reset_parameters()
@@ -114,7 +114,9 @@ class KGATLightning(pl.LightningModule):
         # 초기 임베딩: 사용자와 엔티티 연결
         x = torch.cat([user_embeds, entity_embeds], dim=0)
         
-        # 각 레이어의 출력만 사용 (스킵 연결 제거)
+        # 각 레이어의 출력 저장 (초기 임베딩 포함)
+        all_embeddings = [x]
+        
         # KGAT 컨볼루션 적용
         for conv in self.convs:
             # 사용자-아이템 그래프 컨볼루션
@@ -133,9 +135,13 @@ class KGATLightning(pl.LightningModule):
                 
             x = F.relu(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
+            
+            # 현재 레이어 출력 저장
+            all_embeddings.append(x)
         
-        # 최종 임베딩
-        final_embeds = x
+        # 모든 레이어의 임베딩을 연결 (concatenate)하여 최종 임베딩 생성
+        # KGAT 원래 방식: 각 레이어의 출력을 연결
+        final_embeds = torch.cat(all_embeddings, dim=1)
         
         # 사용자와 엔티티로 다시 분리
         user_final = final_embeds[:self.n_users]
