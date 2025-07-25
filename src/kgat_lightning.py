@@ -273,7 +273,7 @@ class KGATLightning(pl.LightningModule):
         
         optimizer = torch.optim.Adam(self.parameters(), lr=effective_lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='max', factor=0.5, patience=5, verbose=True
+            optimizer, mode='max', factor=0.5, patience=5
         )
         
         return {
