@@ -1,0 +1,141 @@
+# KGAT Training Configuration
+
+defaults:
+  - _self_
+
+# Data configuration
+data:
+  data_dir: ${oc.env:DATA_DIR,data/amazon-book}  # Can override with DATA_DIR env var
+  dataset: amazon-book  # Options: amazon-book, last-fm, yelp2018
+  batch_size: 1024
+  num_workers: 4
+  neg_sample_size: 1
+
+# Model configuration
+model:
+  embed_dim: 64
+  layer_dims: [32, 16]  # Dimensions for each KGAT layer
+  dropout: 0.1
+  aggregator: bi-interaction  # Options: bi-interaction, sum, concat
+  reg_weight: 1e-5
+  lr: 0.001
+
+# Training configuration
+training:
+  max_epochs: 1000
+  early_stopping_patience: 20
+  seed: 42
+  accelerator: auto  # auto, gpu, cpu
+  devices: 1
+  precision: 16  # 16 for mixed precision, 32 for full precision
+  gradient_clip_val: 5.0
+  accumulate_grad_batches: 1
+  check_val_every_n_epoch: 5
+  log_every_n_steps: 100
+  log_dir: logs/
+  model_save_dir: models/
+
+# Experiment tracking
+experiment:
+  name: kgat_baseline
+  tags: [kgat, recommendation]
+  description: "KGAT baseline training on ${data.dataset}"
+
+# Hydra configuration
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
+  launcher:
+    _target_: hydra._internal.core_plugins.basic_launcher.BasicLauncher
+  sweeper:
+    _target_: hydra._internal.core_plugins.basic_sweeper.BasicSweeper
+    max_batch_size: null
+  help:
+    app_name: ${hydra.job.name}
+    header: |
+      == KGAT Training ==
+      Train Knowledge Graph Attention Network for recommendation
+      
+    footer: |
+      Powered by Hydra (https://hydra.cc)
+      
+  hydra_logging:
+    version: 1
+    disable_existing_loggers: false
+    formatters:
+      simple:
+        format: '[%(asctime)s][HYDRA] %(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout
+    root:
+      level: INFO
+      handlers: [console]
+    loggers:
+      logging_example:
+        level: DEBUG
+    disable_existing_loggers: false
+  job_logging:
+    version: 1
+    disable_existing_loggers: false
+    formatters:
+      simple:
+        format: '[%(asctime)s][%(name)s][%(levelname)s] - %(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout
+    root:
+      level: INFO
+      handlers: [console]
+    disable_existing_loggers: false
+  env: {}
+  searchpath: []
+  callbacks: {}
+  output_subdir: .hydra
+  overrides:
+    hydra: []
+    task: []
+  job:
+    name: train
+    override_dirname: ''
+    id: ???
+    num: ???
+    config_name: config
+    env_set: {}
+    env_copy: []
+    config:
+      override_dirname:
+        kv_sep: '='
+        item_sep: ','
+        exclude_keys: []
+  runtime:
+    version: 1.1.1
+    cwd: ${hydra:hydra.runtime.cwd}
+    config_sources:
+    - path: hydra.conf
+      schema: pkg
+      provider: hydra
+    - path: ''
+      schema: file
+      provider: main
+    - path: ''
+      schema: structured
+      provider: schema
+    choices:
+      hydra/env: default
+      hydra/callbacks: null
+      hydra/job_logging: default
+      hydra/hydra_logging: default
+      hydra/hydra_help: default
+      hydra/help: default
+      hydra/sweeper: basic
+      hydra/launcher: basic
+      hydra/output: default
+  verbose: false

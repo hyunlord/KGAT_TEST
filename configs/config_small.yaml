@@ -1,0 +1,17 @@
+# Small configuration for testing and debugging
+
+defaults:
+  - config
+
+# Override for smaller dataset/faster training
+data:
+  batch_size: 128
+
+model:
+  embed_dim: 32
+  layer_dims: [16, 8]
+
+training:
+  max_epochs: 50
+  check_val_every_n_epoch: 2
+  log_every_n_steps: 20
