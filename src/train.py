@@ -37,6 +37,9 @@ class MetricsCallback(pl.Callback):
 @hydra.main(config_path="../configs", config_name="config", version_base="1.1")
 def train(cfg: DictConfig):
     """메인 학습 함수"""
+    # struct 모드 비활성화하여 동적 키 추가 허용
+    OmegaConf.set_struct(cfg, False)
+    
     print(OmegaConf.to_yaml(cfg))
     
     # 랜덤 시드 설정

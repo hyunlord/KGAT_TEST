@@ -19,6 +19,10 @@ model:
   aggregator: bi-interaction  # 옵션: bi-interaction, sum, concat
   reg_weight: 1e-5
   lr: 0.001
+  # 데이터 로드 후 동적으로 설정됨
+  n_users: ???
+  n_entities: ???
+  n_relations: ???
 
 # 학습 설정
 training:
