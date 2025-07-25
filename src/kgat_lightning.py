@@ -18,13 +18,13 @@ class KGATConv(MessagePassing):
         self.aggregator = aggregator
         self.dropout = dropout
         
-        # Transformation matrices
+        # 변환 행렬
         self.W = nn.Linear(in_dim, out_dim, bias=False)
         self.W_r = nn.ModuleList([
             nn.Linear(in_dim, out_dim, bias=False) for _ in range(n_relations)
         ])
         
-        # Attention parameters
+        # 어텐션 파라미터
         if aggregator == 'bi-interaction':
             self.attention = nn.Linear(out_dim, 1)
             
@@ -35,27 +35,27 @@ class KGATConv(MessagePassing):
         return self.propagate(edge_index, x=x, edge_type=edge_type)
     
     def message(self, x_i, x_j, edge_type, index):
-        # Transform neighbor embeddings
+        # 이웃 임베딩 변환
         if edge_type is not None:
-            # For KG edges with relations
+            # 관계가 있는 KG 엣지
             x_j_list = []
             for idx, rel in enumerate(edge_type):
                 x_j_list.append(self.W_r[rel](x_j[idx].unsqueeze(0)))
             x_j = torch.cat(x_j_list, dim=0)
         else:
-            # For user-item edges
+            # 사용자-아이템 엣지
             x_j = self.W(x_j)
         
-        # Calculate attention if using bi-interaction
+        # bi-interaction 사용 시 어텐션 계산
         if self.aggregator == 'bi-interaction':
             x_i = self.W(x_i)
             
-            # Element-wise multiplication for attention
+            # 어텐션을 위한 요소별 곱셈
             attention_input = x_i * x_j
             attention_scores = self.attention(attention_input)
             attention_scores = self.leaky_relu(attention_scores)
             
-            # Return weighted messages
+            # 가중치가 적용된 메시지 반환
             return attention_scores * x_j
         else:
             return x_j
@@ -69,7 +69,7 @@ class KGATLightning(pl.LightningModule):
         super(KGATLightning, self).__init__()
         self.save_hyperparameters()
         
-        # Model parameters
+        # 모델 파라미터
         self.n_users = config.n_users
         self.n_entities = config.n_entities
         self.n_relations = config.n_relations
@@ -80,12 +80,12 @@ class KGATLightning(pl.LightningModule):
         self.lr = config.lr
         self.aggregator = config.aggregator
         
-        # Embeddings
+        # 임베딩
         self.user_embedding = nn.Embedding(self.n_users, self.embed_dim)
         self.entity_embedding = nn.Embedding(self.n_entities, self.embed_dim)
         self.relation_embedding = nn.Embedding(self.n_relations, self.embed_dim)
         
-        # KGAT layers
+        # KGAT 레이어
         self.convs = nn.ModuleList()
         in_dim = self.embed_dim
         for out_dim in self.layer_dims:
@@ -95,10 +95,10 @@ class KGATLightning(pl.LightningModule):
             )
             in_dim = out_dim
             
-        # Final dimension
+        # 최종 차원
         self.final_dim = self.layer_dims[-1] if self.layer_dims else self.embed_dim
         
-        # Initialize embeddings
+        # 임베딩 초기화
         self.reset_parameters()
         
     def reset_parameters(self):
@@ -107,28 +107,28 @@ class KGATLightning(pl.LightningModule):
         nn.init.xavier_uniform_(self.relation_embedding.weight)
         
     def forward(self, edge_index_ui, edge_index_kg=None, edge_type_kg=None):
-        # Get all embeddings
+        # 모든 임베딩 가져오기
         user_embeds = self.user_embedding.weight
         entity_embeds = self.entity_embedding.weight
         
-        # Initial embeddings: concatenate users and entities
+        # 초기 임베딩: 사용자와 엔티티 연결
         x = torch.cat([user_embeds, entity_embeds], dim=0)
         
-        # Store embeddings at each layer for skip connections
+        # 스킵 연결을 위해 각 레이어의 임베딩 저장
         layer_embeds = [x]
         
-        # Apply KGAT convolutions
+        # KGAT 컨볼루션 적용
         for conv in self.convs:
-            # User-item graph convolution
+            # 사용자-아이템 그래프 컨볼루션
             x_ui = conv(x, edge_index_ui)
             
-            # Knowledge graph convolution (only for entities)
+            # 지식 그래프 컨볼루션 (엔티티만 해당)
             if edge_index_kg is not None and edge_type_kg is not None:
-                # Extract entity embeddings
+                # 엔티티 임베딩 추출
                 entity_x = x[self.n_users:]
                 x_kg = conv(entity_x, edge_index_kg, edge_type_kg)
                 
-                # Update entity part of x
+                # x의 엔티티 부분 업데이트
                 x = torch.cat([x_ui[:self.n_users], x_ui[self.n_users:] + x_kg], dim=0)
             else:
                 x = x_ui
@@ -137,23 +137,23 @@ class KGATLightning(pl.LightningModule):
             x = F.dropout(x, p=self.dropout, training=self.training)
             layer_embeds.append(x)
         
-        # Aggregate embeddings from all layers
+        # 모든 레이어의 임베딩 집계
         final_embeds = torch.stack(layer_embeds, dim=1).mean(dim=1)
         
-        # Split back to users and entities
+        # 사용자와 엔티티로 다시 분리
         user_final = final_embeds[:self.n_users]
         entity_final = final_embeds[self.n_users:]
         
         return user_final, entity_final
     
     def bpr_loss(self, users, pos_items, neg_items):
-        """Bayesian Personalized Ranking loss"""
+        """베이지안 개인화 순위 손실"""
         pos_scores = (users * pos_items).sum(dim=1)
         neg_scores = (users * neg_items).sum(dim=1)
         
         bpr_loss = -torch.log(torch.sigmoid(pos_scores - neg_scores) + 1e-10).mean()
         
-        # L2 regularization
+        # L2 정규화
         reg_loss = self.reg_weight * (
             users.norm(2).pow(2) + 
             pos_items.norm(2).pow(2) + 
@@ -167,23 +167,23 @@ class KGATLightning(pl.LightningModule):
         edge_index_kg = batch.get('edge_index_kg', None)
         edge_type_kg = batch.get('edge_type_kg', None)
         
-        # Sample positive and negative items
+        # 긍정 및 부정 아이템 샘플링
         user_ids = batch['user_ids']
         pos_item_ids = batch['pos_item_ids']
         neg_item_ids = batch['neg_item_ids']
         
-        # Forward pass
+        # 순전파
         user_embeds, entity_embeds = self(edge_index_ui, edge_index_kg, edge_type_kg)
         
-        # Get specific embeddings
+        # 특정 임베딩 가져오기
         users = user_embeds[user_ids]
         pos_items = entity_embeds[pos_item_ids]
         neg_items = entity_embeds[neg_item_ids]
         
-        # Calculate loss
+        # 손실 계산
         loss = self.bpr_loss(users, pos_items, neg_items)
         
-        # Logging
+        # 로깅
         self.log('train_loss', loss, prog_bar=True)
         
         return loss
@@ -199,26 +199,26 @@ class KGATLightning(pl.LightningModule):
         edge_index_kg = batch.get('edge_index_kg', None)
         edge_type_kg = batch.get('edge_type_kg', None)
         
-        # Forward pass
+        # 순전파
         user_embeds, entity_embeds = self(edge_index_ui, edge_index_kg, edge_type_kg)
         
-        # Evaluate batch users
+        # 배치 사용자 평가
         metrics = defaultdict(list)
         
         for idx, user_id in enumerate(batch['eval_user_ids']):
             user_embed = user_embeds[user_id]
             
-            # Calculate scores with all items
+            # 모든 아이템과의 점수 계산
             scores = torch.matmul(user_embed, entity_embeds.t())
             
-            # Exclude training items
+            # 학습 아이템 제외
             train_items = batch['train_items'][idx]
             scores[train_items] = -float('inf')
             
-            # Get ground truth
+            # 정답 데이터
             test_items = batch['test_items'][idx]
             
-            # Calculate metrics at different K
+            # 다양한 K값에서 메트릭 계산
             for k in [10, 20, 50]:
                 _, top_indices = torch.topk(scores, k)
                 recommended = set(top_indices.cpu().numpy())
@@ -245,24 +245,24 @@ class KGATLightning(pl.LightningModule):
         return avg_metrics
     
     def _calculate_ndcg(self, ranked_list, ground_truth, k):
-        """Calculate NDCG@k"""
+        """NDCG@k 계산"""
         dcg = 0.0
         for i, item in enumerate(ranked_list[:k]):
             if item in ground_truth:
                 dcg += 1 / np.log2(i + 2)
         
-        # Ideal DCG
+        # 이상적인 DCG
         idcg = sum(1 / np.log2(i + 2) for i in range(min(len(ground_truth), k)))
         
         return dcg / idcg if idcg > 0 else 0.0
     
     def configure_optimizers(self):
-        # Scale learning rate by number of GPUs for DDP
+        # DDP를 위해 GPU 수에 따라 학습률 스케일링
         effective_lr = self.lr
         if self.trainer.world_size > 1:
-            # Linear scaling rule for distributed training
+            # 분산 학습을 위한 선형 스케일링 규칙
             effective_lr = self.lr * self.trainer.world_size
-            print(f"Scaling learning rate from {self.lr} to {effective_lr} for {self.trainer.world_size} GPUs")
+            print(f"{self.trainer.world_size} GPU용으로 학습률을 {self.lr}에서 {effective_lr}로 스케일링")
         
         optimizer = torch.optim.Adam(self.parameters(), lr=effective_lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -279,14 +279,14 @@ class KGATLightning(pl.LightningModule):
         }
     
     def get_user_embeddings(self, edge_index_ui, edge_index_kg=None, edge_type_kg=None):
-        """Get all user embeddings"""
+        """모든 사용자 임베딩 가져오기"""
         self.eval()
         with torch.no_grad():
             user_embeds, _ = self(edge_index_ui, edge_index_kg, edge_type_kg)
         return user_embeds
     
     def get_item_embeddings(self, edge_index_ui, edge_index_kg=None, edge_type_kg=None):
-        """Get all item embeddings"""
+        """모든 아이템 임베딩 가져오기"""
         self.eval()
         with torch.no_grad():
             _, entity_embeds = self(edge_index_ui, edge_index_kg, edge_type_kg)

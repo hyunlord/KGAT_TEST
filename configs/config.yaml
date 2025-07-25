@@ -1,34 +1,34 @@
-# KGAT Training Configuration
+# KGAT 학습 설정
 
 defaults:
   - _self_
 
-# Data configuration
+# 데이터 설정
 data:
-  data_dir: ${oc.env:DATA_DIR,data/amazon-book}  # Can override with DATA_DIR env var
-  dataset: amazon-book  # Options: amazon-book, last-fm, yelp2018
+  data_dir: ${oc.env:DATA_DIR,data/amazon-book}  # DATA_DIR 환경 변수로 재정의 가능
+  dataset: amazon-book  # 옵션: amazon-book, last-fm, yelp2018
   batch_size: 1024
   num_workers: 4
   neg_sample_size: 1
 
-# Model configuration
+# 모델 설정
 model:
   embed_dim: 64
-  layer_dims: [32, 16]  # Dimensions for each KGAT layer
+  layer_dims: [32, 16]  # 각 KGAT 레이어의 차원
   dropout: 0.1
-  aggregator: bi-interaction  # Options: bi-interaction, sum, concat
+  aggregator: bi-interaction  # 옵션: bi-interaction, sum, concat
   reg_weight: 1e-5
   lr: 0.001
 
-# Training configuration
+# 학습 설정
 training:
   max_epochs: 1000
   early_stopping_patience: 20
   seed: 42
   accelerator: auto  # auto, gpu, cpu
-  devices: 1  # Number of GPUs to use (1 for single, -1 for all available)
-  strategy: auto  # auto, ddp, ddp_spawn, deepspeed, etc.
-  precision: 16  # 16 for mixed precision, 32 for full precision
+  devices: 1  # 사용할 GPU 개수 (1: 단일, -1: 모든 GPU)
+  strategy: auto  # auto, ddp, ddp_spawn, deepspeed 등
+  precision: 16  # 16: 혼합 정밀도, 32: 전체 정밀도
   gradient_clip_val: 5.0
   accumulate_grad_batches: 1
   check_val_every_n_epoch: 5
@@ -36,8 +36,8 @@ training:
   log_dir: logs/
   model_save_dir: models/
 
-# Experiment tracking
+# 실험 추적
 experiment:
   name: kgat_baseline
   tags: [kgat, recommendation]
-  description: "KGAT baseline training on ${data.dataset}"
+  description: "${data.dataset}에서 KGAT 베이스라인 학습"

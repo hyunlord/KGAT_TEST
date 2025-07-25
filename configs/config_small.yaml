@@ -1,9 +1,9 @@
-# Small configuration for testing and debugging
+# 테스트 및 디버깅을 위한 작은 설정
 
 defaults:
   - config
 
-# Override for smaller dataset/faster training
+# 더 작은 데이터셋/더 빠른 학습을 위한 재정의
 data:
   batch_size: 128
 

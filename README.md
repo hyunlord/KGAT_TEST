@@ -1,78 +1,78 @@
-# KGAT PyTorch Lightning Implementation
+# KGAT PyTorch Lightning 구현
 
-Knowledge Graph Attention Network (KGAT) implementation using PyTorch Lightning for recommendation systems. This project includes training pipeline and evaluation methods comparing standard vs relation-enhanced recommendations.
+추천 시스템을 위한 Knowledge Graph Attention Network (KGAT)의 PyTorch Lightning 기반 구현입니다. 표준 추천 방식과 관계 기반 향상 추천 방식을 비교하는 평가 방법을 포함합니다.
 
-## Features
+## 주요 기능
 
-- ✅ PyTorch Lightning based implementation
-- ✅ Modular architecture with DataModule
-- ✅ Hydra configuration management
-- ✅ TensorBoard logging
-- ✅ Model checkpointing and early stopping
-- ✅ Two evaluation methods comparison:
-  - Standard: User-Item similarity only
-  - Enhanced: User+Relation-Item similarity
+- ✅ PyTorch Lightning 기반 구현
+- ✅ DataModule을 활용한 모듈식 아키텍처
+- ✅ Hydra 설정 관리
+- ✅ TensorBoard 로깅
+- ✅ 모델 체크포인트 및 조기 종료
+- ✅ 두 가지 평가 방법 비교:
+  - 표준: 사용자-아이템 유사도만 사용
+  - 향상: 사용자+관계-아이템 유사도 사용
 
-## Installation
+## 설치
 
 ```bash
-# Basic installation
+# 기본 설치
 pip install -r requirements.txt
 
-# For DeepSpeed support (optional)
+# DeepSpeed 지원 (선택사항)
 pip install deepspeed
 
-# For GPU monitoring (optional)
+# GPU 모니터링 (선택사항)
 pip install gputil
 ```
 
-## Quick Start
+## 빠른 시작
 
-### 1. Prepare Data
+### 1. 데이터 준비
 
 ```bash
-# Create sample data for testing
+# 테스트용 샘플 데이터 생성
 python scripts/download_data.py --sample-only
 
-# Or download specific dataset (instructions will be provided)
+# 특정 데이터셋 다운로드 (지침이 제공됨)
 python scripts/download_data.py --dataset amazon-book
 ```
 
-### 2. Train KGAT Model
+### 2. KGAT 모델 학습
 
-#### Single GPU Training
+#### 단일 GPU 학습
 ```bash
-# Train with default configuration
+# 기본 설정으로 학습
 python src/train.py
 
-# Train with custom configuration
+# 사용자 정의 설정으로 학습
 python src/train.py data.batch_size=512 model.embed_dim=128
 
-# Train with small configuration (for testing)
+# 작은 설정으로 학습 (테스트용)
 python src/train.py --config-name config_small
 ```
 
-#### Multi-GPU Training
+#### 멀티 GPU 학습
 ```bash
-# Use all available GPUs with DDP (Recommended)
+# DDP로 모든 GPU 사용 (권장)
 python src/train.py training.devices=-1 training.strategy=ddp
 
-# Use specific number of GPUs
+# 특정 개수의 GPU 사용
 python src/train.py training.devices=4 training.strategy=ddp data.batch_size=4096
 
-# Use multi-GPU configuration file
+# 멀티 GPU 설정 파일 사용
 python src/train.py --config-name config_multi_gpu
 
-# Use DeepSpeed for better memory efficiency
+# 더 나은 메모리 효율을 위한 DeepSpeed 사용
 python src/train.py training.devices=-1 training.strategy=deepspeed_stage_2 training.precision=16
 ```
 
-#### Full Training Example
+#### 전체 학습 예제
 ```bash
-# Download dataset first
+# 먼저 데이터셋 다운로드
 python scripts/download_data.py --dataset amazon-book
 
-# Train on Amazon-Book dataset with 4 GPUs
+# 4개 GPU로 Amazon-Book 데이터셋 학습
 python src/train.py \
     data.data_dir=data/amazon-book \
     data.batch_size=4096 \
@@ -82,40 +82,40 @@ python src/train.py \
     training.max_epochs=200
 ```
 
-### 3. Evaluate and Compare Methods
+### 3. 평가 및 방법 비교
 
 ```bash
-# Compare standard vs enhanced methods
+# 표준 vs 향상 방법 비교
 python src/evaluate_comparison.py \
     --checkpoint logs/kgat_amazon-book/version_0/checkpoints/best.ckpt \
     --n-sample-users 20
 ```
 
-## Project Structure
+## 프로젝트 구조
 
 ```
 KGAT_TEST/
 ├── src/
-│   ├── kgat_lightning.py      # PyTorch Lightning KGAT model
-│   ├── data_module.py         # Data loading and preprocessing
-│   ├── train.py               # Training script
-│   ├── evaluator.py           # Evaluation methods
-│   ├── compare_methods.py     # Method comparison utilities
-│   └── evaluate_comparison.py # Compare trained model methods
+│   ├── kgat_lightning.py      # PyTorch Lightning KGAT 모델
+│   ├── data_module.py         # 데이터 로딩 및 전처리
+│   ├── train.py               # 학습 스크립트
+│   ├── evaluator.py           # 평가 방법
+│   ├── compare_methods.py     # 방법 비교 유틸리티
+│   └── evaluate_comparison.py # 학습된 모델 방법 비교
 ├── configs/
-│   ├── config.yaml            # Main configuration
-│   └── config_small.yaml      # Small config for testing
+│   ├── config.yaml            # 주요 설정
+│   └── config_small.yaml      # 테스트용 작은 설정
 ├── scripts/
-│   └── download_data.py       # Data download script
-├── data/                      # Dataset directory
-├── logs/                      # TensorBoard logs
-├── models/                    # Saved models
-└── results/                   # Evaluation results
+│   └── download_data.py       # 데이터 다운로드 스크립트
+├── data/                      # 데이터셋 디렉토리
+├── logs/                      # TensorBoard 로그
+├── models/                    # 저장된 모델
+└── results/                   # 평가 결과
 ```
 
-## Configuration
+## 설정
 
-Main configuration options in `configs/config.yaml`:
+`configs/config.yaml`의 주요 설정 옵션:
 
 ```yaml
 data:
@@ -133,36 +133,36 @@ training:
   lr: 0.001
 ```
 
-## Data Format
+## 데이터 형식
 
-Required files in data directory:
-- `train.txt`: User-item interactions (format: `user_id item_id1 item_id2 ...`)
-- `test.txt`: Test interactions (same format)
-- `kg_final.txt`: Knowledge graph triples (format: `head_entity relation_id tail_entity`)
+데이터 디렉토리에 필요한 파일:
+- `train.txt`: 사용자-아이템 상호작용 (형식: `user_id item_id1 item_id2 ...`)
+- `test.txt`: 테스트 상호작용 (동일한 형식)
+- `kg_final.txt`: 지식 그래프 트리플 (형식: `head_entity relation_id tail_entity`)
 
-## Training Monitoring
+## 학습 모니터링
 
-### TensorBoard Setup
+### TensorBoard 설정
 ```bash
-# Install TensorBoard (already in requirements.txt)
+# TensorBoard 설치 (이미 requirements.txt에 포함)
 pip install tensorboard
 
-# Start TensorBoard
+# TensorBoard 시작
 tensorboard --logdir logs/
 
-# For remote server access
+# 원격 서버 접속용
 tensorboard --logdir logs/ --bind_all
 
-# View at http://localhost:6006
+# http://localhost:6006에서 확인
 ```
 
-See [TensorBoard Guide](docs/TensorBoard_Guide.md) for detailed setup and usage.
+자세한 설정 및 사용법은 [TensorBoard 가이드](docs/TensorBoard_Guide.md)를 참조하세요.
 
-## Training Strategy Comparison
+## 학습 전략 비교
 
 ### DDP vs DeepSpeed
 ```bash
-# Compare different distributed training strategies
+# 다양한 분산 학습 전략 비교
 python scripts/compare_strategies.py \
     --data-dir data/amazon-book \
     --devices 4 \
@@ -170,35 +170,35 @@ python scripts/compare_strategies.py \
     --max-epochs 10
 ```
 
-See [DDP vs DeepSpeed Guide](docs/DDP_vs_DeepSpeed.md) for detailed comparison.
+자세한 비교는 [DDP vs DeepSpeed 가이드](docs/DDP_vs_DeepSpeed.md)를 참조하세요.
 
-## Results
+## 결과
 
-The comparison script generates:
-1. **Metrics comparison** (Recall@K, Precision@K, NDCG@K)
-2. **Visualizations** (bar charts, improvement heatmaps)
-3. **User-level analysis** (sample recommendations comparison)
+비교 스크립트는 다음을 생성합니다:
+1. **메트릭 비교** (Recall@K, Precision@K, NDCG@K)
+2. **시각화** (막대 차트, 개선 히트맵)
+3. **사용자 수준 분석** (샘플 추천 비교)
 
-Example output:
+예시 출력:
 ```
-Standard Method (User-Item Similarity Only):
+표준 방법 (사용자-아이템 유사도만):
   Recall@20: 0.1234
   Precision@20: 0.0456
   NDCG@20: 0.0789
 
-Enhanced Method (User+Relation-Item Similarity):
+향상된 방법 (사용자+관계-아이템 유사도):
   Recall@20: 0.1456 (+18.0%)
   Precision@20: 0.0523 (+14.7%)
   NDCG@20: 0.0891 (+12.9%)
 ```
 
-## Multi-GPU Training Guide
+## 멀티 GPU 학습 가이드
 
-For detailed multi-GPU training instructions, see [Multi-GPU Guide](README_MULTI_GPU.md).
+자세한 멀티 GPU 학습 지침은 [멀티 GPU 가이드](README_MULTI_GPU.md)를 참조하세요.
 
-## Citation
+## 인용
 
-If you use this code, please cite:
+이 코드를 사용하시면 다음을 인용해주세요:
 ```bibtex
 @inproceedings{KGAT2019,
   author = {Wang, Xiang and He, Xiangnan and Cao, Yixin and Liu, Meng and Chua, Tat-Seng},

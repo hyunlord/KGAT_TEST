@@ -262,7 +262,7 @@ def main():
     parser.add_argument('--max-epochs', type=int, default=10,
                         help='Number of epochs for comparison')
     parser.add_argument('--strategies', nargs='+', 
-                        default=['ddp', 'deepspeed_stage_1', 'deepspeed_stage_2'],
+                        default=['ddp', 'deepspeed_stage_1', 'deepspeed_stage_2', 'deepspeed_stage_3'],
                         choices=['ddp', 'deepspeed_stage_1', 'deepspeed_stage_2', 'deepspeed_stage_3'],
                         help='Strategies to compare')
     parser.add_argument('--test-stage-3', action='store_true',

@@ -1,32 +1,32 @@
-# Multi-GPU configuration for KGAT training
+# KGAT 멀티 GPU 학습 설정
 
 defaults:
   - config
   - _self_
 
-# Data configuration - larger batch size for multi-GPU
+# 데이터 설정 - 멀티 GPU를 위한 더 큰 배치 크기
 data:
-  batch_size: 4096  # 1024 * 4 GPUs
-  num_workers: 16  # 4 workers per GPU
+  batch_size: 4096  # 1024 * 4 GPU
+  num_workers: 16  # GPU당 4개 워커
 
-# Training configuration for multi-GPU
+# 멀티 GPU를 위한 학습 설정
 training:
   accelerator: gpu
-  devices: -1  # Use all available GPUs
-  strategy: ddp  # Distributed Data Parallel
-  precision: 16  # Mixed precision for better performance
+  devices: -1  # 모든 GPU 사용
+  strategy: ddp  # 분산 데이터 병렬
+  precision: 16  # 혼합 정밀도로 더 나은 성능
   
-  # Sync batch norm for multi-GPU
+  # 멀티 GPU를 위한 배치 정규화 동기화
   sync_batchnorm: true
   
-  # Find optimal batch size (optional)
+  # 최적 배치 크기 찾기 (선택사항)
   auto_scale_batch_size: false
   
-  # Gradient accumulation can help with memory
+  # 메모리 문제 시 그래디언트 누적 사용
   accumulate_grad_batches: 1
   
-  # More frequent validation in multi-GPU setting
+  # 멀티 GPU 설정에서 더 자주 검증
   check_val_every_n_epoch: 2
   
-  # DDP specific settings
-  replace_sampler_ddp: true  # Automatically handles distributed sampling
+  # DDP 특정 설정
+  replace_sampler_ddp: true  # 분산 샘플링 자동 처리

@@ -19,10 +19,10 @@ class KGATDataset(Dataset):
         self.neg_sample_size = neg_sample_size
         self.is_training = is_training
         
-        # Create user list for iteration
+        # 반복을 위한 사용자 리스트 생성
         self.users = list(user_item_dict.keys())
         
-        # Create item set for negative sampling
+        # 부정 샘플링을 위한 아이템 집합 생성
         self.all_items = set(range(n_items))
         
     def __len__(self):
@@ -33,10 +33,10 @@ class KGATDataset(Dataset):
         pos_items = self.user_item_dict[user]
         
         if self.is_training:
-            # Sample one positive item
+            # 하나의 긍정 아이템 샘플링
             pos_item = np.random.choice(pos_items)
             
-            # Sample negative items
+            # 부정 아이템 샘플링
             neg_items = []
             user_items = set(pos_items)
             
@@ -52,7 +52,7 @@ class KGATDataset(Dataset):
                 'neg_item_ids': neg_items[0] if self.neg_sample_size == 1 else neg_items
             }
         else:
-            # For evaluation, return user and their items
+            # 평가를 위해 사용자와 해당 아이템 반환
             return {
                 'user_id': user,
                 'pos_items': pos_items
@@ -67,53 +67,53 @@ class KGATDataModule(pl.LightningDataModule):
         self.num_workers = config.num_workers
         self.neg_sample_size = config.neg_sample_size
         
-        # Data statistics
+        # 데이터 통계
         self.n_users = 0
         self.n_items = 0
         self.n_entities = 0
         self.n_relations = 0
         
-        # Data storage
+        # 데이터 저장소
         self.train_user_dict = defaultdict(list)
         self.test_user_dict = defaultdict(list)
         self.kg_data = []
         
-        # Graph structures
+        # 그래프 구조
         self.edge_index_ui = None
         self.edge_index_kg = None
         self.edge_type_kg = None
         
     def prepare_data(self):
-        """Download data if needed"""
-        # This is where you would download data if it doesn't exist
+        """필요 시 데이터 다운로드"""
+        # 데이터가 없을 경우 여기서 다운로드
         pass
     
     def setup(self, stage=None):
-        """Load and process data"""
-        # Load CF data
+        """데이터 로드 및 처리"""
+        # CF 데이터 로드
         self._load_cf_data()
         
-        # Load KG data
+        # KG 데이터 로드
         self._load_kg_data()
         
-        # Create graph structures
+        # 그래프 구조 생성
         self._create_graph_structures()
         
-        print(f"Data loaded successfully:")
-        print(f"  Users: {self.n_users}")
-        print(f"  Items: {self.n_items}")
-        print(f"  Entities: {self.n_entities}")
-        print(f"  Relations: {self.n_relations}")
-        print(f"  Train interactions: {sum(len(items) for items in self.train_user_dict.values())}")
-        print(f"  Test interactions: {sum(len(items) for items in self.test_user_dict.values())}")
-        print(f"  KG triples: {len(self.kg_data)}")
+        print(f"데이터 로드 성공:")
+        print(f"  사용자: {self.n_users}")
+        print(f"  아이템: {self.n_items}")
+        print(f"  엔티티: {self.n_entities}")
+        print(f"  관계: {self.n_relations}")
+        print(f"  학습 상호작용: {sum(len(items) for items in self.train_user_dict.values())}")
+        print(f"  테스트 상호작용: {sum(len(items) for items in self.test_user_dict.values())}")
+        print(f"  KG 트리플: {len(self.kg_data)}")
     
     def _load_cf_data(self):
-        """Load collaborative filtering data"""
+        """협업 필터링 데이터 로드"""
         train_file = os.path.join(self.data_dir, 'train.txt')
         test_file = os.path.join(self.data_dir, 'test.txt')
         
-        # Load training data
+        # 학습 데이터 로드
         with open(train_file, 'r') as f:
             for line in f:
                 parts = line.strip().split()
@@ -136,10 +136,10 @@ class KGATDataModule(pl.LightningDataModule):
         
         self.n_users += 1
         self.n_items += 1
-        self.n_entities = self.n_items  # Initially, entities are items
+        self.n_entities = self.n_items  # 초기에는 엔티티가 아이템
     
     def _load_kg_data(self):
-        """Load knowledge graph data"""
+        """지식 그래프 데이터 로드"""
         kg_file = os.path.join(self.data_dir, 'kg_final.txt')
         
         if os.path.exists(kg_file):
@@ -155,22 +155,22 @@ class KGATDataModule(pl.LightningDataModule):
             self.n_entities += 1
             self.n_relations += 1
         else:
-            print(f"Warning: KG file {kg_file} not found. Proceeding without KG data.")
-            self.n_relations = 1  # Dummy relation
+            print(f"경고: KG 파일 {kg_file}을 찾을 수 없습니다. KG 데이터 없이 진행합니다.")
+            self.n_relations = 1  # 더미 관계
     
     def _create_graph_structures(self):
-        """Create edge indices for user-item and knowledge graphs"""
-        # User-item bipartite graph
+        """사용자-아이템 및 지식 그래프를 위한 엣지 인덱스 생성"""
+        # 사용자-아이템 이분 그래프
         edge_list_ui = []
         for user, items in self.train_user_dict.items():
             for item in items:
-                # Add bidirectional edges
+                # 양방향 엣지 추가
                 edge_list_ui.append([user, self.n_users + item])
                 edge_list_ui.append([self.n_users + item, user])
         
         self.edge_index_ui = torch.tensor(edge_list_ui, dtype=torch.long).t()
         
-        # Knowledge graph
+        # 지식 그래프
         if self.kg_data:
             edge_list_kg = []
             edge_types = []
@@ -185,7 +185,7 @@ class KGATDataModule(pl.LightningDataModule):
                 self.edge_type_kg = torch.tensor(edge_types, dtype=torch.long)
     
     def train_dataloader(self):
-        """Create training dataloader"""
+        """학습 데이터로더 생성"""
         dataset = KGATDataset(
             self.train_user_dict,
             self.n_users,
@@ -204,8 +204,8 @@ class KGATDataModule(pl.LightningDataModule):
         )
     
     def val_dataloader(self):
-        """Create validation dataloader"""
-        # Use a subset of test users for validation
+        """검증 데이터로더 생성"""
+        # 검증을 위해 테스트 사용자의 일부 사용
         val_users = list(self.test_user_dict.keys())[:1000]
         val_dict = {u: self.test_user_dict[u] for u in val_users}
         
@@ -226,7 +226,7 @@ class KGATDataModule(pl.LightningDataModule):
         )
     
     def test_dataloader(self):
-        """Create test dataloader"""
+        """테스트 데이터로더 생성"""
         dataset = KGATDataset(
             self.test_user_dict,
             self.n_users,
@@ -244,7 +244,7 @@ class KGATDataModule(pl.LightningDataModule):
         )
     
     def _train_collate_fn(self, batch):
-        """Collate function for training"""
+        """학습용 collate 함수"""
         users = torch.tensor([b['user_id'] for b in batch], dtype=torch.long)
         pos_items = torch.tensor([b['pos_item_id'] for b in batch], dtype=torch.long)
         neg_items = torch.tensor([b['neg_item_ids'] for b in batch], dtype=torch.long)
@@ -259,10 +259,10 @@ class KGATDataModule(pl.LightningDataModule):
         }
     
     def _eval_collate_fn(self, batch):
-        """Collate function for evaluation"""
+        """평가용 collate 함수"""
         users = [b['user_id'] for b in batch]
         
-        # Get train and test items for each user
+        # 각 사용자의 학습 및 테스트 아이템 가져오기
         train_items = [self.train_user_dict.get(u, []) for u in users]
         test_items = [b['pos_items'] for b in batch]
         
@@ -276,7 +276,7 @@ class KGATDataModule(pl.LightningDataModule):
         }
     
     def get_statistics(self):
-        """Get data statistics"""
+        """데이터 통계 가져오기"""
         return {
             'n_users': self.n_users,
             'n_items': self.n_items,
