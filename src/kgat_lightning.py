@@ -114,9 +114,7 @@ class KGATLightning(pl.LightningModule):
         # 초기 임베딩: 사용자와 엔티티 연결
         x = torch.cat([user_embeds, entity_embeds], dim=0)
         
-        # 스킵 연결을 위해 각 레이어의 임베딩 저장
-        layer_embeds = [x]
-        
+        # 각 레이어의 출력만 사용 (스킵 연결 제거)
         # KGAT 컨볼루션 적용
         for conv in self.convs:
             # 사용자-아이템 그래프 컨볼루션
@@ -135,10 +133,9 @@ class KGATLightning(pl.LightningModule):
                 
             x = F.relu(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
-            layer_embeds.append(x)
         
-        # 모든 레이어의 임베딩 집계
-        final_embeds = torch.stack(layer_embeds, dim=1).mean(dim=1)
+        # 최종 임베딩
+        final_embeds = x
         
         # 사용자와 엔티티로 다시 분리
         user_final = final_embeds[:self.n_users]
