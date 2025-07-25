@@ -42,6 +42,10 @@ def train(cfg: DictConfig):
     # 랜덤 시드 설정
     pl.seed_everything(cfg.training.seed)
     
+    # Hydra가 작업 디렉토리를 변경하므로 절대 경로로 변환
+    if not os.path.isabs(cfg.data.data_dir):
+        cfg.data.data_dir = os.path.join(hydra.utils.get_original_cwd(), cfg.data.data_dir)
+    
     # 데이터 모듈 초기화
     data_module = KGATDataModule(cfg.data)
     data_module.setup()
@@ -129,8 +133,12 @@ def train(cfg: DictConfig):
     print(f"TensorBoard 로그 저장 위치: {logger.log_dir}")
     
     # 최종 모델 저장
-    final_model_path = os.path.join(cfg.training.model_save_dir, f"kgat_final_{timestamp}.pth")
-    os.makedirs(cfg.training.model_save_dir, exist_ok=True)
+    model_save_dir = cfg.training.model_save_dir
+    if not os.path.isabs(model_save_dir):
+        model_save_dir = os.path.join(hydra.utils.get_original_cwd(), model_save_dir)
+    
+    final_model_path = os.path.join(model_save_dir, f"kgat_final_{timestamp}.pth")
+    os.makedirs(model_save_dir, exist_ok=True)
     torch.save(model.state_dict(), final_model_path)
     print(f"최종 모델 저장 위치: {final_model_path}")
     
