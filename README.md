@@ -142,12 +142,21 @@ Required files in data directory:
 
 ## Training Monitoring
 
+### TensorBoard Setup
 ```bash
+# Install TensorBoard (already in requirements.txt)
+pip install tensorboard
+
 # Start TensorBoard
 tensorboard --logdir logs/
 
+# For remote server access
+tensorboard --logdir logs/ --bind_all
+
 # View at http://localhost:6006
 ```
+
+See [TensorBoard Guide](docs/TensorBoard_Guide.md) for detailed setup and usage.
 
 ## Training Strategy Comparison
 
