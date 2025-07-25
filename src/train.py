@@ -88,29 +88,48 @@ def train(cfg: DictConfig):
     
     # 로거 설정
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_dir = cfg.training.log_dir
+    if not os.path.isabs(log_dir):
+        log_dir = os.path.join(hydra.utils.get_original_cwd(), log_dir)
+    
     logger = TensorBoardLogger(
-        save_dir=cfg.training.log_dir,
+        save_dir=log_dir,
         name=f"kgat_{cfg.data.dataset}",
         version=timestamp
     )
     
-    # 트레이너 초기화
-    trainer = pl.Trainer(
-        max_epochs=cfg.training.max_epochs,
-        accelerator=cfg.training.accelerator,
-        devices=cfg.training.devices,
-        strategy=cfg.training.get('strategy', 'auto'),
-        callbacks=callbacks,
-        logger=logger,
-        gradient_clip_val=cfg.training.gradient_clip_val,
-        accumulate_grad_batches=cfg.training.accumulate_grad_batches,
-        check_val_every_n_epoch=cfg.training.check_val_every_n_epoch,
-        log_every_n_steps=cfg.training.log_every_n_steps,
-        precision=cfg.training.precision,
-        sync_batchnorm=cfg.training.get('sync_batchnorm', False),
-        replace_sampler_ddp=cfg.training.get('replace_sampler_ddp', True),
-        deterministic=True
-    )
+    # 트레이너 초기화 - PyTorch Lightning 2.0+ 호환
+    trainer_kwargs = {
+        'max_epochs': cfg.training.max_epochs,
+        'accelerator': cfg.training.accelerator,
+        'devices': cfg.training.devices,
+        'strategy': cfg.training.get('strategy', 'auto'),
+        'callbacks': callbacks,
+        'logger': logger,
+        'gradient_clip_val': cfg.training.gradient_clip_val,
+        'accumulate_grad_batches': cfg.training.accumulate_grad_batches,
+        'check_val_every_n_epoch': cfg.training.check_val_every_n_epoch,
+        'log_every_n_steps': cfg.training.log_every_n_steps,
+        'sync_batchnorm': cfg.training.get('sync_batchnorm', False),
+        'deterministic': True
+    }
+    
+    # precision 파라미터 처리 (문자열로 변환)
+    precision = cfg.training.precision
+    if isinstance(precision, int):
+        if precision == 16:
+            trainer_kwargs['precision'] = '16-mixed'
+        elif precision == 32:
+            trainer_kwargs['precision'] = '32-true'
+        else:
+            trainer_kwargs['precision'] = str(precision)
+    else:
+        trainer_kwargs['precision'] = precision
+    
+    # PyTorch Lightning 1.x에서만 지원되는 파라미터 제거
+    # replace_sampler_ddp는 2.0에서 자동으로 처리됨
+    
+    trainer = pl.Trainer(**trainer_kwargs)
     
     # 모델 학습
     print("\n학습 시작...")

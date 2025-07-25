@@ -28,5 +28,4 @@ training:
   # 멀티 GPU 설정에서 더 자주 검증
   check_val_every_n_epoch: 2
   
-  # DDP 특정 설정
-  replace_sampler_ddp: true  # 분산 샘플링 자동 처리
+  # DDP 특정 설정 (PyTorch Lightning 2.0에서는 자동 처리됨)

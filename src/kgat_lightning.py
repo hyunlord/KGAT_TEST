@@ -184,7 +184,7 @@ class KGATLightning(pl.LightningModule):
         loss = self.bpr_loss(users, pos_items, neg_items)
         
         # 로깅
-        self.log('train_loss', loss, prog_bar=True)
+        self.log('train_loss', loss, prog_bar=True, sync_dist=True)
         
         return loss
     
@@ -220,27 +220,34 @@ class KGATLightning(pl.LightningModule):
             
             # 다양한 K값에서 메트릭 계산
             for k in [10, 20, 50]:
-                _, top_indices = torch.topk(scores, k)
+                # 아이템 수가 k보다 적을 수 있으므로 min 사용
+                k_actual = min(k, scores.size(0))
+                _, top_indices = torch.topk(scores, k_actual)
                 recommended = set(top_indices.cpu().numpy())
-                ground_truth = set(test_items.cpu().numpy())
+                
+                # test_items가 텐서가 아닐 수 있으므로 처리
+                if torch.is_tensor(test_items):
+                    ground_truth = set(test_items.cpu().numpy())
+                else:
+                    ground_truth = set(test_items)
                 
                 # Recall@K
                 recall = len(recommended & ground_truth) / len(ground_truth) if ground_truth else 0
                 metrics[f'recall@{k}'].append(recall)
                 
                 # Precision@K
-                precision = len(recommended & ground_truth) / k
+                precision = len(recommended & ground_truth) / k_actual
                 metrics[f'precision@{k}'].append(precision)
                 
                 # NDCG@K
-                ndcg = self._calculate_ndcg(top_indices.cpu().numpy(), ground_truth, k)
+                ndcg = self._calculate_ndcg(top_indices.cpu().numpy(), ground_truth, k_actual)
                 metrics[f'ndcg@{k}'].append(ndcg)
         
         # Average metrics
         avg_metrics = {f'{stage}_{key}': np.mean(values) 
                       for key, values in metrics.items()}
         
-        self.log_dict(avg_metrics, prog_bar=True)
+        self.log_dict(avg_metrics, prog_bar=True, sync_dist=True)
         
         return avg_metrics
     
@@ -259,7 +266,7 @@ class KGATLightning(pl.LightningModule):
     def configure_optimizers(self):
         # DDP를 위해 GPU 수에 따라 학습률 스케일링
         effective_lr = self.lr
-        if self.trainer.world_size > 1:
+        if hasattr(self, 'trainer') and hasattr(self.trainer, 'world_size') and self.trainer.world_size > 1:
             # 분산 학습을 위한 선형 스케일링 규칙
             effective_lr = self.lr * self.trainer.world_size
             print(f"{self.trainer.world_size} GPU용으로 학습률을 {self.lr}에서 {effective_lr}로 스케일링")

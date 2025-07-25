@@ -170,7 +170,7 @@ python scripts/compare_strategies.py \
     --max-epochs 10
 ```
 
-자세한 비교는 [DDP vs DeepSpeed 가이드](docs/DDP_vs_DeepSpeed.md)를 참조하세요.
+자세한 비교는 [DDP vs DeepSpeed 가이드](docs/DDP_vs_DeepSpeed_KR.md)를 참조하세요.
 
 ## 결과
 

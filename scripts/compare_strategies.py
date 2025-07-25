@@ -180,16 +180,19 @@ def compare_strategies(args):
         
         time.sleep(10)
     
-    # Test DeepSpeed Stage 3 (if enough memory)
-    if 'deepspeed_stage_3' in args.strategies and args.test_stage_3:
+    # Test DeepSpeed Stage 3
+    if 'deepspeed_stage_3' in args.strategies:
         print("\n" + "="*80)
         print("Testing DeepSpeed Stage 3")
         print("="*80)
         
         ds3_config = base_config.copy()
-        ds3_config['data.batch_size'] = args.batch_size // 2  # Reduce batch size for Stage 3
+        # Stage 3는 메모리를 더 효율적으로 사용하지만 배치 크기를 약간 줄이는 것이 안전
+        ds3_config['data.batch_size'] = int(args.batch_size * 0.75)
         ds3_result = run_training('deepspeed_stage_3', ds3_config, args.max_epochs)
         results.append(ds3_result)
+        
+        time.sleep(10)
     
     return results
 
@@ -265,8 +268,6 @@ def main():
                         default=['ddp', 'deepspeed_stage_1', 'deepspeed_stage_2', 'deepspeed_stage_3'],
                         choices=['ddp', 'deepspeed_stage_1', 'deepspeed_stage_2', 'deepspeed_stage_3'],
                         help='Strategies to compare')
-    parser.add_argument('--test-stage-3', action='store_true',
-                        help='Also test DeepSpeed Stage 3 (requires more memory)')
     
     args = parser.parse_args()
     
