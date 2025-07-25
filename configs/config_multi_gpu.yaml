@@ -2,6 +2,7 @@
 
 defaults:
   - config
+  - _self_
 
 # Data configuration - larger batch size for multi-GPU
 data:
