@@ -35,7 +35,7 @@ training:
   precision: 16  # 16: 혼합 정밀도, 32: 전체 정밀도
   gradient_clip_val: 5.0
   accumulate_grad_batches: 1
-  check_val_every_n_epoch: 5
+  check_val_every_n_epoch: 1  # 매 에폭마다 validation (lr scheduler를 위해 필요)
   log_every_n_steps: 100
   log_dir: logs/
   model_save_dir: models/

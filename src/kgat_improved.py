@@ -402,7 +402,9 @@ class KGATImproved(pl.LightningModule):
             'lr_scheduler': {
                 'scheduler': scheduler,
                 'monitor': 'val_recall@20',
-                'frequency': 1
+                'frequency': 1,
+                'interval': 'epoch',
+                'strict': False  # Don't error if metric is not available yet
             }
         }
     

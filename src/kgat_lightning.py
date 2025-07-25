@@ -313,7 +313,9 @@ class KGATLightning(pl.LightningModule):
             'lr_scheduler': {
                 'scheduler': scheduler,
                 'monitor': 'val_recall@20',
-                'frequency': 1
+                'frequency': 1,
+                'interval': 'epoch',
+                'strict': False  # 메트릭이 없을 때 에러 대신 경고만 표시
             }
         }
     
