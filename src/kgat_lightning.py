@@ -133,8 +133,12 @@ class KGATLightning(pl.LightningModule):
             else:
                 x = x_ui
                 
+            # 활성화 함수 및 드롭아웃 적용
             x = F.relu(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
+            
+            # L2 정규화 적용
+            x = F.normalize(x, p=2, dim=1)
             
             # 현재 레이어 출력 저장
             all_embeddings.append(x)

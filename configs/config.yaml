@@ -45,3 +45,6 @@ experiment:
   name: kgat_baseline
   tags: [kgat, recommendation]
   description: "${data.dataset}에서 KGAT 베이스라인 학습"
+
+# 모델 선택
+use_improved_model: false  # true: 개선된 모델 사용, false: 원본 모델 사용

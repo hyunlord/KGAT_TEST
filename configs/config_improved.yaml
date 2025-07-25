@@ -1,0 +1,48 @@
+# Improved KGAT configuration
+
+defaults:
+  - _self_
+
+# Data settings
+data:
+  data_dir: ${oc.env:DATA_DIR,data/amazon-book}  # Can be overridden by DATA_DIR env var
+  dataset: amazon-book  # Options: amazon-book, last-fm, yelp2018
+  batch_size: 1024
+  num_workers: 4
+  neg_sample_size: 1
+
+# Model settings
+model:
+  embed_dim: 64
+  layer_dims: [32, 16, 8]  # More layers for better representation
+  dropout: 0.1
+  aggregator: bi-interaction  # Options: bi-interaction, gcn, graphsage
+  reg_weight: 1e-5
+  lr: 0.001
+  use_pretrain: false  # Whether to use pretrained embeddings
+  # Dynamically set after data loading
+  n_users: ???
+  n_entities: ???
+  n_relations: ???
+
+# Training settings
+training:
+  max_epochs: 1000
+  early_stopping_patience: 20
+  seed: 42
+  accelerator: auto  # auto, gpu, cpu
+  devices: 1  # Number of GPUs (1: single, -1: all GPUs)
+  strategy: auto  # auto, ddp, ddp_spawn, deepspeed etc
+  precision: 16  # 16: mixed precision, 32: full precision
+  gradient_clip_val: 5.0
+  accumulate_grad_batches: 1
+  check_val_every_n_epoch: 5
+  log_every_n_steps: 100
+  log_dir: logs/
+  model_save_dir: models/
+
+# Experiment tracking
+experiment:
+  name: kgat_improved_${model.aggregator}
+  tags: [kgat, recommendation, improved]
+  description: "Improved KGAT with ${model.aggregator} aggregation on ${data.dataset}"
