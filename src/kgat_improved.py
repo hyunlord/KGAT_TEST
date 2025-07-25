@@ -266,7 +266,7 @@ class KGATImproved(pl.LightningModule):
         neg_scores = (users * neg_items).sum(dim=1)
         
         # BPR loss
-        bpr_loss = -torch.log(torch.sigmoid(pos_scores - neg_scores) + 1e-10).mean()
+        bpr_loss = -torch.log(torch.sigmoid(pos_scores - neg_scores) + 1e-8).mean()
         
         # L2 regularization on embeddings
         reg_loss = self.reg_weight * (
@@ -278,9 +278,15 @@ class KGATImproved(pl.LightningModule):
         return bpr_loss + reg_loss
     
     def training_step(self, batch, batch_idx):
-        edge_index_ui = batch['edge_index_ui']
+        # Move all tensors to current device
+        edge_index_ui = batch['edge_index_ui'].to(self.device)
         edge_index_kg = batch.get('edge_index_kg', None)
         edge_type_kg = batch.get('edge_type_kg', None)
+        
+        if edge_index_kg is not None:
+            edge_index_kg = edge_index_kg.to(self.device)
+        if edge_type_kg is not None:
+            edge_type_kg = edge_type_kg.to(self.device)
         
         # Sample positive and negative items
         user_ids = batch['user_ids']

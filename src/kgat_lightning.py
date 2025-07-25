@@ -157,7 +157,7 @@ class KGATLightning(pl.LightningModule):
         pos_scores = (users * pos_items).sum(dim=1)
         neg_scores = (users * neg_items).sum(dim=1)
         
-        bpr_loss = -torch.log(torch.sigmoid(pos_scores - neg_scores) + 1e-10).mean()
+        bpr_loss = -torch.log(torch.sigmoid(pos_scores - neg_scores) + 1e-8).mean()
         
         # L2 정규화
         reg_loss = self.reg_weight * (
@@ -169,9 +169,15 @@ class KGATLightning(pl.LightningModule):
         return bpr_loss + reg_loss
     
     def training_step(self, batch, batch_idx):
-        edge_index_ui = batch['edge_index_ui']
+        # 모든 텐서를 현재 디바이스로 이동
+        edge_index_ui = batch['edge_index_ui'].to(self.device)
         edge_index_kg = batch.get('edge_index_kg', None)
         edge_type_kg = batch.get('edge_type_kg', None)
+        
+        if edge_index_kg is not None:
+            edge_index_kg = edge_index_kg.to(self.device)
+        if edge_type_kg is not None:
+            edge_type_kg = edge_type_kg.to(self.device)
         
         # 긍정 및 부정 아이템 샘플링
         user_ids = batch['user_ids']
@@ -201,9 +207,15 @@ class KGATLightning(pl.LightningModule):
         return self._evaluation_step(batch, batch_idx, 'test')
     
     def _evaluation_step(self, batch, batch_idx, stage):
-        edge_index_ui = batch['edge_index_ui']
+        # 모든 텐서를 현재 디바이스로 이동
+        edge_index_ui = batch['edge_index_ui'].to(self.device)
         edge_index_kg = batch.get('edge_index_kg', None)
         edge_type_kg = batch.get('edge_type_kg', None)
+        
+        if edge_index_kg is not None:
+            edge_index_kg = edge_index_kg.to(self.device)
+        if edge_type_kg is not None:
+            edge_type_kg = edge_type_kg.to(self.device)
         
         # 순전파
         user_embeds, entity_embeds = self(edge_index_ui, edge_index_kg, edge_type_kg)
@@ -260,12 +272,17 @@ class KGATLightning(pl.LightningModule):
     def _calculate_ndcg(self, ranked_list, ground_truth, k):
         """NDCG@k 계산"""
         dcg = 0.0
+        hits = 0
         for i, item in enumerate(ranked_list[:k]):
             if item in ground_truth:
+                # 관련성 점수는 1 (이진 관련성)
                 dcg += 1 / np.log2(i + 2)
+                hits += 1
         
-        # 이상적인 DCG
-        idcg = sum(1 / np.log2(i + 2) for i in range(min(len(ground_truth), k)))
+        # 이상적인 DCG: ground truth 아이템들이 상위에 랭크된 경우
+        idcg = 0.0
+        for i in range(min(len(ground_truth), k)):
+            idcg += 1 / np.log2(i + 2)
         
         return dcg / idcg if idcg > 0 else 0.0
     
@@ -274,8 +291,17 @@ class KGATLightning(pl.LightningModule):
         effective_lr = self.lr
         if hasattr(self, 'trainer') and hasattr(self.trainer, 'world_size') and self.trainer.world_size > 1:
             # 분산 학습을 위한 선형 스케일링 규칙
-            effective_lr = self.lr * self.trainer.world_size
-            print(f"{self.trainer.world_size} GPU용으로 학습률을 {self.lr}에서 {effective_lr}로 스케일링")
+            # 효과적인 배치 크기에 따라 스케일링
+            # 주의: 매우 큰 배치 크기에서는 sqrt 스케일링이 더 나을 수 있음
+            effective_batch_size = self.hparams.config.batch_size * self.trainer.world_size
+            if effective_batch_size > 4096:
+                # 큰 배치에는 sqrt 스케일링 사용
+                effective_lr = self.lr * np.sqrt(self.trainer.world_size)
+                print(f"{self.trainer.world_size} GPU용으로 학습률을 {self.lr}에서 {effective_lr}로 sqrt 스케일링")
+            else:
+                # 작은 배치에는 선형 스케일링 사용
+                effective_lr = self.lr * self.trainer.world_size
+                print(f"{self.trainer.world_size} GPU용으로 학습률을 {self.lr}에서 {effective_lr}로 선형 스케일링")
         
         optimizer = torch.optim.Adam(self.parameters(), lr=effective_lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(

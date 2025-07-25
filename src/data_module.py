@@ -36,15 +36,21 @@ class KGATDataset(Dataset):
             # 하나의 긍정 아이템 샘플링
             pos_item = np.random.choice(pos_items)
             
-            # 부정 아이템 샘플링
-            neg_items = []
+            # 부정 아이템 샘플링 (더 효율적인 방법)
             user_items = set(pos_items)
+            # 가능한 모든 부정 아이템 후보
+            neg_candidates = list(self.all_items - user_items)
             
-            for _ in range(self.neg_sample_size):
-                neg_item = np.random.randint(0, self.n_items)
-                while neg_item in user_items:
-                    neg_item = np.random.randint(0, self.n_items)
-                neg_items.append(neg_item)
+            # 충분한 후보가 있는 경우 샘플링
+            if len(neg_candidates) >= self.neg_sample_size:
+                neg_items = np.random.choice(neg_candidates, 
+                                           size=self.neg_sample_size, 
+                                           replace=False).tolist()
+            else:
+                # 후보가 부족한 경우 반복 허용
+                neg_items = np.random.choice(neg_candidates, 
+                                           size=self.neg_sample_size, 
+                                           replace=True).tolist()
             
             return {
                 'user_id': user,
@@ -113,6 +119,12 @@ class KGATDataModule(pl.LightningDataModule):
         train_file = os.path.join(self.data_dir, 'train.txt')
         test_file = os.path.join(self.data_dir, 'test.txt')
         
+        # 파일 존재 확인
+        if not os.path.exists(train_file):
+            raise FileNotFoundError(f"학습 데이터 파일을 찾을 수 없습니다: {train_file}")
+        if not os.path.exists(test_file):
+            raise FileNotFoundError(f"테스트 데이터 파일을 찾을 수 없습니다: {test_file}")
+        
         # 학습 데이터 로드
         with open(train_file, 'r') as f:
             for line in f:
@@ -137,6 +149,12 @@ class KGATDataModule(pl.LightningDataModule):
         self.n_users += 1
         self.n_items += 1
         self.n_entities = self.n_items  # 초기에는 엔티티가 아이템
+        
+        # 데이터 검증
+        if self.n_users == 1:  # 0에서 1을 더했으므로
+            raise ValueError("학습 데이터에서 사용자를 찾을 수 없습니다")
+        if self.n_items == 1:
+            raise ValueError("학습 데이터에서 아이템을 찾을 수 없습니다")
     
     def _load_kg_data(self):
         """지식 그래프 데이터 로드"""
@@ -176,6 +194,8 @@ class KGATDataModule(pl.LightningDataModule):
             edge_types = []
             
             for head, relation, tail in self.kg_data:
+                # 현재는 아이템 간의 관계만 사용
+                # TODO: 모든 엔티티를 활용하려면 모델 아키텍처 수정 필요
                 if head < self.n_items and tail < self.n_items:
                     edge_list_kg.append([head, tail])
                     edge_types.append(relation)
@@ -205,9 +225,11 @@ class KGATDataModule(pl.LightningDataModule):
     
     def val_dataloader(self):
         """검증 데이터로더 생성"""
-        # 검증을 위해 테스트 사용자의 일부 사용
-        val_users = list(self.test_user_dict.keys())[:1000]
-        val_dict = {u: self.test_user_dict[u] for u in val_users}
+        # 학습 데이터의 일부를 검증용으로 사용 (마지막 10%)
+        all_users = list(self.train_user_dict.keys())
+        val_split_idx = int(len(all_users) * 0.9)
+        val_users = all_users[val_split_idx:]
+        val_dict = {u: self.train_user_dict[u] for u in val_users}
         
         dataset = KGATDataset(
             val_dict,
