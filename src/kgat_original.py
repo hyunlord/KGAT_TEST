@@ -56,17 +56,23 @@ class KGAT(nn.Module):
         # 각 레이어의 가중치 행렬들
         self.weight_list = nn.ParameterList()
         for k in range(self.n_layers):
+            if k == 0:
+                in_size = self.emb_size
+            else:
+                in_size = self.layer_size[k-1]
+            out_size = self.layer_size[k]
+            
             if self.alg_type == 'bi':
                 self.weight_list.append(nn.Parameter(
-                    torch.randn(self.layer_size[k], self.layer_size[k]) * 0.01
+                    torch.randn(in_size, out_size) * 0.01
                 ))
             elif self.alg_type == 'gcn':
                 self.weight_list.append(nn.Parameter(
-                    torch.randn(self.layer_size[k], self.layer_size[k]) * 0.01
+                    torch.randn(in_size, out_size) * 0.01
                 ))
             else:  # graphsage
                 self.weight_list.append(nn.Parameter(
-                    torch.randn(2 * self.layer_size[k], self.layer_size[k]) * 0.01
+                    torch.randn(2 * in_size, out_size) * 0.01
                 ))
         
         # Laplacian 행렬 생성
@@ -146,26 +152,23 @@ class KGAT(nn.Module):
                 # Bi-Interaction aggregator
                 sum_embed = torch.sparse.mm(self.A_in, ego_embed)
                 bi_embed = torch.mul(ego_embed, sum_embed)
-                ego_embed = nn.LeakyReLU(negative_slope=0.2)(
-                    torch.matmul(bi_embed, self.weight_list[k])
-                )
+                ego_embed = torch.matmul(bi_embed, self.weight_list[k])
+                ego_embed = nn.LeakyReLU(negative_slope=0.2)(ego_embed)
                 
             elif self.alg_type == 'gcn':
                 # GCN aggregator
                 side_embed = torch.sparse.mm(self.A_in, ego_embed)
-                ego_embed = nn.LeakyReLU(negative_slope=0.2)(
-                    torch.matmul(side_embed, self.weight_list[k])
-                )
+                ego_embed = torch.matmul(side_embed, self.weight_list[k])
+                ego_embed = nn.LeakyReLU(negative_slope=0.2)(ego_embed)
                 
             else:  # graphsage
                 # GraphSAGE aggregator
                 side_embed = torch.sparse.mm(self.A_in, ego_embed)
-                ego_embed = nn.LeakyReLU(negative_slope=0.2)(
-                    torch.matmul(
-                        torch.cat([ego_embed, side_embed], dim=1),
-                        self.weight_list[k]
-                    )
+                ego_embed = torch.matmul(
+                    torch.cat([ego_embed, side_embed], dim=1),
+                    self.weight_list[k]
                 )
+                ego_embed = nn.LeakyReLU(negative_slope=0.2)(ego_embed)
             
             # Dropout
             ego_embed = nn.Dropout(self.mess_dropout[k])(ego_embed)
