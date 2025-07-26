@@ -65,6 +65,10 @@ class RelationEnhancedComparison:
             # 전체 임베딩 계산
             u_embed, i_embed = self.model()
             
+            # 원본 임베딩 (첫 번째 레이어만)
+            u_embed_base = self.model.user_embed
+            i_embed_base = self.model.entity_embed[:self.data_loader.n_items]
+            
             # KG에서 관계 정보 활용
             recommendations = {}
             
@@ -72,8 +76,8 @@ class RelationEnhancedComparison:
                 # 사용자 ID 변환
                 u_original = u - self.data_loader.n_entities
                 
-                # 기본 사용자 임베딩
-                user_emb = u_embed[u_original]
+                # 기본 사용자 임베딩 (첫 번째 레이어)
+                user_emb_base = u_embed_base[u_original]
                 
                 # 관계별 강화된 임베딩 계산
                 enhanced_scores = torch.zeros(self.data_loader.n_items).to(self.device)
@@ -91,18 +95,19 @@ class RelationEnhancedComparison:
                                     # 관계 임베딩 가져오기
                                     rel_emb = self.model.relation_embed[relation]
                                     
-                                    # user + relation 임베딩
-                                    enhanced_user = user_emb + 0.1 * rel_emb  # 가중치 조절 가능
+                                    # user + relation 임베딩 (같은 차원)
+                                    enhanced_user = user_emb_base + 0.1 * rel_emb  # 가중치 조절 가능
                                     
-                                    # 타겟 아이템과의 유사도
-                                    target_emb = i_embed[target]
+                                    # 타겟 아이템과의 유사도 (기본 임베딩 사용)
+                                    target_emb = i_embed_base[target]
                                     score = torch.dot(enhanced_user, target_emb)
                                     
                                     # 점수 누적
                                     enhanced_scores[target] += score
                 
-                # 기본 점수와 관계 강화 점수 결합
-                base_scores = torch.matmul(user_emb, i_embed.t())
+                # 기본 점수와 관계 강화 점수 결합 (전체 임베딩 사용)
+                user_emb_full = u_embed[u_original]
+                base_scores = torch.matmul(user_emb_full, i_embed.t())
                 final_scores = base_scores + 0.3 * enhanced_scores  # 가중치 조절 가능
                 
                 # 이미 본 아이템 제외

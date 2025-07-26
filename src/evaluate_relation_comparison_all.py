@@ -49,6 +49,18 @@ class RelationEnhancedComparisonAll:
             return self.model.relation_embed
         else:
             return self.model.relation_embedding.weight
+    
+    def get_base_embeddings(self):
+        """기본 임베딩 (첫 번째 레이어) 추출"""
+        if self.model_type == 'original':
+            u_embed_base = self.model.user_embed
+            i_embed_base = self.model.entity_embed[:self.data_loader.n_items]
+            return u_embed_base, i_embed_base
+        else:
+            # Fixed 모델의 경우 기본 임베딩
+            u_embed_base = self.model.user_embedding.weight
+            i_embed_base = self.model.entity_embedding.weight[:self.data_loader.n_items - self.data_loader.n_users]
+            return u_embed_base, i_embed_base
         
     def get_standard_recommendations(self, user_ids, k=20):
         """표준 방식: user-item 유사도만 사용"""
@@ -94,6 +106,8 @@ class RelationEnhancedComparisonAll:
         with torch.no_grad():
             # 전체 임베딩 계산
             u_embed, i_embed = self.get_embeddings()
+            # 기본 임베딩 (관계 임베딩과 동일 차원)
+            u_embed_base, i_embed_base = self.get_base_embeddings()
             relation_embed = self.get_relation_embeddings()
             
             # KG에서 관계 정보 활용
@@ -106,8 +120,8 @@ class RelationEnhancedComparisonAll:
                 else:
                     u_original = u
                 
-                # 기본 사용자 임베딩
-                user_emb = u_embed[u_original]
+                # 기본 사용자 임베딩 (관계 임베딩과 동일 차원)
+                user_emb_base = u_embed_base[u_original]
                 
                 # 관계별 강화된 임베딩 계산
                 n_items = self.data_loader.n_items if self.model_type == 'original' else i_embed.size(0)
@@ -145,18 +159,19 @@ class RelationEnhancedComparisonAll:
                                 # 관계 임베딩 가져오기
                                 rel_emb = relation_embed[relation]
                                 
-                                # user + relation 임베딩
-                                enhanced_user = user_emb + 0.1 * rel_emb  # 가중치 조절 가능
+                                # user + relation 임베딩 (같은 차원)
+                                enhanced_user = user_emb_base + 0.1 * rel_emb  # 가중치 조절 가능
                                 
-                                # 타겟 아이템과의 유사도
-                                target_emb = i_embed[target_idx]
+                                # 타겟 아이템과의 유사도 (기본 임베딩 사용)
+                                target_emb = i_embed_base[target_idx]
                                 score = torch.dot(enhanced_user, target_emb)
                                 
                                 # 점수 누적
                                 enhanced_scores[target_idx] += score
                 
-                # 기본 점수와 관계 강화 점수 결합
-                base_scores = torch.matmul(user_emb, i_embed.t())
+                # 기본 점수와 관계 강화 점수 결합 (전체 임베딩 사용)
+                user_emb_full = u_embed[u_original]
+                base_scores = torch.matmul(user_emb_full, i_embed.t())
                 final_scores = base_scores + 0.3 * enhanced_scores  # 가중치 조절 가능
                 
                 # 이미 본 아이템 제외
