@@ -6,6 +6,10 @@ from pytorch_lightning.loggers import TensorBoardLogger
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from datetime import datetime
+import warnings
+
+# PyTorch 분산 학습 경고 필터링
+warnings.filterwarnings("ignore", message="No device id is provided")
 
 from kgat_lightning import KGATLightning
 from data_module import KGATDataModule

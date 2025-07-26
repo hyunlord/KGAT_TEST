@@ -225,11 +225,13 @@ class KGATDataModule(pl.LightningDataModule):
     
     def val_dataloader(self):
         """검증 데이터로더 생성"""
-        # 학습 데이터의 일부를 검증용으로 사용 (마지막 10%)
-        all_users = list(self.train_user_dict.keys())
-        val_split_idx = int(len(all_users) * 0.9)
-        val_users = all_users[val_split_idx:]
-        val_dict = {u: self.train_user_dict[u] for u in val_users}
+        # 테스트 데이터가 있는 사용자 중 일부를 검증용으로 사용
+        test_users_with_data = [u for u in self.test_user_dict.keys() 
+                               if u in self.train_user_dict and len(self.test_user_dict[u]) > 0]
+        
+        # 최대 1000명의 사용자를 검증용으로 사용
+        val_users = test_users_with_data[:min(1000, len(test_users_with_data))]
+        val_dict = {u: self.test_user_dict[u] for u in val_users}
         
         dataset = KGATDataset(
             val_dict,

@@ -136,8 +136,8 @@ class KGATLightning(pl.LightningModule):
             x = F.relu(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
             
-            # L2 정규화 적용
-            x = F.normalize(x, p=2, dim=1)
+            # L2 정규화 적용 (스케일 팩터 추가)
+            x = F.normalize(x, p=2, dim=1) * 5.0  # 스케일 업으로 점수 범위 확대
             
             # 현재 레이어 출력 저장
             all_embeddings.append(x)
