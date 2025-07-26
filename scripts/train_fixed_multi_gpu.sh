@@ -34,7 +34,7 @@ echo "Fixed KGAT 모델 멀티 GPU 학습 시작..."
 echo "======================================"
 
 python src/train_improved.py \
-    model.type=kgat_fixed \
+    +model.type=kgat_fixed \
     data.data_dir=$DATA_DIR \
     data.batch_size=$BATCH_SIZE \
     training.devices=$NUM_GPUS \

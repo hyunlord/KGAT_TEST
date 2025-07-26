@@ -239,11 +239,32 @@ python scripts/compare_strategies.py \
 
 ## 성능 비교
 
-개선된 모델의 예상 성능 향상:
-- Recall@20: 5-10% 향상
-- NDCG@20: 5-8% 향상
-- 더 안정적인 학습 과정
-- 다양한 데이터셋에 대한 적응성 향상
+### 모델 구현체 비교
+여러 KGAT 구현체(Original, Lightning, Fixed)의 성능을 비교할 수 있습니다:
+
+```bash
+# 모든 학습된 모델 자동 비교
+bash scripts/compare_all_models.sh
+
+# 특정 모델만 비교
+bash scripts/compare_all_models.sh \
+    --original models/original_kgat.pth \
+    --fixed models/fixed_kgat.ckpt
+
+# 빠른 메트릭 확인
+python scripts/quick_comparison.py
+```
+
+비교 결과:
+- 성능 테이블 출력
+- 시각화 그래프 생성 (results/model_comparison/)
+- JSON 형식으로 상세 결과 저장
+
+### 예상 성능
+- **Original KGAT**: 논문 재현 (~7% Recall@20)
+- **Fixed KGAT**: Original과 동일한 성능 목표
+- **Lightning KGAT**: 낮은 성능 (정규화 누락)
+- **Improved KGAT**: 실험적 개선 시도
 
 ## 사용되지 않는 스크립트 정리
 
