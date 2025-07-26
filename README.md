@@ -245,6 +245,16 @@ python scripts/compare_strategies.py \
 - 더 안정적인 학습 과정
 - 다양한 데이터셋에 대한 적응성 향상
 
+## 사용되지 않는 스크립트 정리
+
+다음 스크립트들은 프로젝트에서 더 이상 사용되지 않으며 정리 대상입니다:
+- 디버그 스크립트: `debug_*.py` 파일들
+- 백업 파일: `*_backup.py`
+- 대체된 구현: `kgat_model.py`, `kgat_original.py`, `kgat_lightning_alt.py`
+- 일회성 도구: `create_proper_data.py`, `validate_fix.py`
+
+자세한 내용은 [사용되지 않는 스크립트 분석](unused_scripts_analysis.md)을 참조하세요.
+
 ## 인용
 
 이 코드를 사용하시면 다음을 인용해주세요:

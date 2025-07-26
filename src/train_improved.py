@@ -10,6 +10,7 @@ import argparse
 
 from kgat_lightning import KGATLightning
 from kgat_improved import KGATImproved
+from kgat_lightning_fixed import KGATLightningFixed
 from data_module import KGATDataModule
 
 
@@ -47,11 +48,19 @@ def train(cfg: DictConfig):
     # Disable struct mode to allow dynamic key addition
     OmegaConf.set_struct(cfg, False)
     
-    # Check if we should use the improved model
+    # Check which model to use
+    model_type = cfg.get('model', {}).get('type', 'original')
     use_improved = cfg.get('use_improved_model', False)
     
+    if model_type == 'kgat_fixed':
+        model_name = 'Fixed'
+    elif use_improved:
+        model_name = 'Improved'
+    else:
+        model_name = 'Original'
+    
     print(f"\n{'='*50}")
-    print(f"Using {'Improved' if use_improved else 'Original'} KGAT Model")
+    print(f"Using {model_name} KGAT Model")
     print(f"Aggregator: {cfg.model.aggregator}")
     print(f"{'='*50}\n")
     
@@ -87,7 +96,9 @@ def train(cfg: DictConfig):
     print(f"  KG Triplets: {stats['n_kg_triples']}")
     
     # Create model
-    if use_improved:
+    if model_type == 'kgat_fixed':
+        model = KGATLightningFixed(cfg.model)
+    elif use_improved:
         model = KGATImproved(cfg.model)
     else:
         model = KGATLightning(cfg.model)
