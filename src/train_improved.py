@@ -65,12 +65,7 @@ def train(cfg: DictConfig):
         cfg.data.data_dir = os.path.join(hydra.utils.get_original_cwd(), cfg.data.data_dir)
     
     # Create data module
-    data_module = KGATDataModule(
-        data_dir=cfg.data.data_dir,
-        batch_size=cfg.data.batch_size,
-        num_workers=cfg.data.num_workers,
-        neg_sample_size=cfg.data.neg_sample_size
-    )
+    data_module = KGATDataModule(cfg.data)
     
     # Setup data module to get dataset statistics
     data_module.setup()
@@ -80,12 +75,16 @@ def train(cfg: DictConfig):
     cfg.model.n_entities = data_module.n_entities
     cfg.model.n_relations = data_module.n_relations
     
+    # Get dataset statistics
+    stats = data_module.get_statistics()
+    
     print(f"\nDataset Statistics:")
     print(f"  Users: {cfg.model.n_users}")
     print(f"  Entities: {cfg.model.n_entities}")
     print(f"  Relations: {cfg.model.n_relations}")
-    print(f"  Interactions: {data_module.n_interactions}")
-    print(f"  KG Triplets: {data_module.n_kg_triplets}")
+    print(f"  Train Interactions: {stats['n_train_interactions']}")
+    print(f"  Test Interactions: {stats['n_test_interactions']}")
+    print(f"  KG Triplets: {stats['n_kg_triples']}")
     
     # Create model
     if use_improved:
