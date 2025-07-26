@@ -273,12 +273,13 @@ class DataLoaderOriginal(object):
     
     def print_info(self, logging):
         """데이터 정보 출력"""
-        logging.info('n_users:           %d' % self.n_users)
-        logging.info('n_items:           %d' % self.n_items)
-        logging.info('n_entities:        %d' % self.n_entities)
-        logging.info('n_relations:       %d' % self.n_relations)
-        
-        logging.info('n_cf_train:        %d' % self.n_cf_train)
-        logging.info('n_cf_test:         %d' % self.n_cf_test)
-        
-        logging.info('n_kg_train:        %d' % self.n_kg_train)
+        if logging is not None:
+            logging.info('n_users:           %d' % self.n_users)
+            logging.info('n_items:           %d' % self.n_items)
+            logging.info('n_entities:        %d' % self.n_entities)
+            logging.info('n_relations:       %d' % self.n_relations)
+            
+            logging.info('n_cf_train:        %d' % self.n_cf_train)
+            logging.info('n_cf_test:         %d' % self.n_cf_test)
+            
+            logging.info('n_kg_train:        %d' % self.n_kg_train)
