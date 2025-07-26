@@ -1,0 +1,13 @@
+# Fixed KGAT 모델 설정
+embedding_size: 64
+layer_sizes: [64, 32, 16]
+aggregator: bi
+dropout_rates: [0.1, 0.1, 0.1]
+lr: 0.0001
+weight_decay: 1e-5
+
+# 동적으로 설정될 값들
+n_users: ???
+n_entities: ???
+n_relations: ???
+batch_size: ???
