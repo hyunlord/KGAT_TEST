@@ -54,7 +54,7 @@ def AUC(ground_truth, prediction):
 
 def recall_at_k(r, k, all_pos_num):
     """Recall@K 계산"""
-    r = np.asfarray(r)[:k]
+    r = np.asarray(r, dtype=np.float32)[:k]
     return np.sum(r) / all_pos_num
 
 
@@ -69,7 +69,7 @@ def hit_at_k(r, k):
 
 def ndcg_at_k(r, k, all_pos_num):
     """NDCG@K 계산"""
-    r = np.asfarray(r)[:k]
+    r = np.asarray(r, dtype=np.float32)[:k]
     if np.sum(r) > 0:
         return np.sum(r / np.log2(np.arange(2, len(r) + 2)))
     else:
