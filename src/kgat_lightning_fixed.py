@@ -77,7 +77,7 @@ class KGATLightningFixed(pl.LightningModule):
         self.dropout_rates = config.dropout_rates
         
         self.lr = config.lr
-        self.weight_decay = config.weight_decay
+        self.weight_decay = config.reg_weight  # config에서 reg_weight 사용
         self.batch_size = config.batch_size
         
         # 임베딩 레이어 (원본과 동일한 초기화)
@@ -223,6 +223,40 @@ class KGATLightningFixed(pl.LightningModule):
             self.log(f'val_precision@{k}', metrics[f'precision@{k}'], on_epoch=True)
         
         return metrics
+    
+    def get_all_embeddings(self):
+        """모든 노드의 임베딩을 반환 (관계 비교용)"""
+        with torch.no_grad():
+            # 전체 임베딩 계산
+            ego_embed = torch.cat([self.user_embedding.weight, self.entity_embedding.weight], dim=0)
+            all_embed = [ego_embed]
+            
+            # 각 레이어별로 전파
+            for i, conv in enumerate(self.conv_layers):
+                if hasattr(self, 'edge_index_ui') and self.edge_index_ui is not None:
+                    ego_embed = conv(ego_embed, self.edge_index_ui, self.edge_weight_ui)
+                else:
+                    # 더미 엣지로 계산 (평가용)
+                    n_nodes = ego_embed.size(0)
+                    edge_index = torch.stack([torch.arange(n_nodes), torch.arange(n_nodes)]).to(ego_embed.device)
+                    ego_embed = conv(ego_embed, edge_index)
+                
+                all_embed.append(ego_embed)
+            
+            # 모든 레이어 결합
+            all_embed = torch.cat(all_embed, dim=1)
+            return all_embed
+    
+    def set_graph_data(self, adj_mat, kg_mat=None):
+        """그래프 데이터 설정 (평가용)"""
+        # scipy sparse matrix를 edge_index로 변환
+        coo = adj_mat.tocoo()
+        edge_index = torch.LongTensor(np.vstack((coo.row, coo.col)))
+        self.edge_index_ui = edge_index.to(self.device)
+        
+        # edge weight 계산
+        num_nodes = adj_mat.shape[0]
+        _, self.edge_weight_ui = self.compute_edge_weights(self.edge_index_ui, num_nodes)
     
     def _compute_metrics(self, user_embeddings, item_embeddings, train_items, test_items, k_list):
         """평가 메트릭 계산"""
