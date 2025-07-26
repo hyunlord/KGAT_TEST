@@ -1,22 +1,23 @@
 """
-Multi-GPU training script for original KGAT implementation using DistributedDataParallel
+Multi-GPU training script for original KGAT implementation
 """
 import os
 import sys
-import random
-import logging
-import argparse
-import numpy as np
-from time import time
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
+import numpy as np
+import random
+import logging
+import argparse
+from time import time
+
+# Add parent directory to path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from kgat_original import KGAT
 from data_loader_original import DataLoaderOriginal
@@ -24,20 +25,20 @@ from evaluate_original import test
 
 
 def parse_args():
-    """Parse arguments with multi-GPU support"""
-    parser = argparse.ArgumentParser(description="KGAT Multi-GPU")
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description='Multi-GPU KGAT')
     
-    # Dataset
+    # Data arguments
     parser.add_argument('--dataset', type=str, default='amazon-book',
-                        help='dataset name: amazon-book, last-fm, yelp2018')
+                        help='dataset name')
     parser.add_argument('--data_path', type=str, default='data/',
-                        help='path of data directory')
+                        help='data directory')
     
-    # Model
+    # Model arguments
     parser.add_argument('--model_type', type=str, default='kgat',
-                        help='model type: kgat, bprmf, fm, nfm, cke, cfkg')
+                        help='model type')
     parser.add_argument('--adj_type', type=str, default='si',
-                        help='adjacency matrix type: si, bi')
+                        help='adjacency type: bi or si')
     parser.add_argument('--alg_type', type=str, default='bi',
                         help='algorithm type: bi, gcn, graphsage')
     
@@ -54,6 +55,8 @@ def parse_args():
     # Training settings
     parser.add_argument('--epoch', type=int, default=1000,
                         help='number of epochs')
+    parser.add_argument('--batch_size', type=int, default=1024,
+                        help='CF batch size')
     parser.add_argument('--cf_batch_size', type=int, default=1024,
                         help='CF batch size')
     parser.add_argument('--kg_batch_size', type=int, default=2048,
@@ -67,31 +70,33 @@ def parse_args():
     parser.add_argument('--mess_dropout', nargs='?', default='[0.1, 0.1, 0.1]',
                         help='message dropout per layer')
     
-    # Evaluation
+    # Other settings
     parser.add_argument('--Ks', nargs='?', default='[20, 40, 60, 80, 100]',
-                        help='k values for evaluation')
+                        help='K values for evaluation')
     parser.add_argument('--save_flag', type=int, default=1,
-                        help='save model or not')
+                        help='save model flag')
     parser.add_argument('--test_flag', type=str, default='part',
-                        help='test flag: part, full')
+                        help='test flag')
     parser.add_argument('--report_flag', type=int, default=0,
                         help='report flag')
     parser.add_argument('--use_pretrain', type=int, default=0,
                         help='use pretrained embeddings')
     parser.add_argument('--pretrain_embedding_dir', type=str, default='pretrain/',
-                        help='pretrained embeddings directory')
+                        help='pretrain directory')
+    parser.add_argument('--gpu_id', type=int, default=0,
+                        help='gpu id (not used in multi-gpu)')
     parser.add_argument('--seed', type=int, default=2019,
                         help='random seed')
     
     # Multi-GPU specific
-    parser.add_argument('--local_rank', type=int, default=-1,
-                        help='local rank for distributed training')
-    parser.add_argument('--gpu_id', type=int, default=0,
-                        help='gpu id (for single GPU)')
+    parser.add_argument('--num_gpus', type=int, default=None,
+                        help='number of GPUs to use')
+    parser.add_argument('--master_port', type=str, default='12355',
+                        help='master port for distributed training')
     
     args = parser.parse_args()
     
-    # Convert string to list
+    # Parse list arguments
     args.layer_size = eval(args.layer_size)
     args.regs = eval(args.regs)
     args.node_dropout = eval(args.node_dropout)
@@ -102,38 +107,46 @@ def parse_args():
 
 
 def setup(rank, world_size):
-    """Initialize the distributed environment"""
-    os.environ['MASTER_ADDR'] = os.environ.get('MASTER_ADDR', 'localhost')
-    os.environ['MASTER_PORT'] = os.environ.get('MASTER_PORT', '29500')
-    
-    # Initialize the process group
+    """Initialize distributed training"""
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = os.environ.get('MASTER_PORT', '12355')
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
 
 def cleanup():
-    """Clean up the distributed environment"""
+    """Clean up distributed training"""
     dist.destroy_process_group()
 
 
 def setup_logger(args, rank):
-    """Set up logger for distributed training"""
-    log_path = os.path.join('logs', args.dataset)
+    """Set up logger for each process"""
+    log_path = os.path.join('logs', args.dataset, 'multi_gpu')
     if not os.path.exists(log_path):
-        os.makedirs(log_path)
+        os.makedirs(log_path, exist_ok=True)
     
-    # Only rank 0 writes to file
-    handlers = []
+    logger = logging.getLogger(f'rank_{rank}')
+    logger.setLevel(logging.INFO)
+    
+    # Clear existing handlers
+    logger.handlers = []
+    
+    # File handler
+    fh = logging.FileHandler(os.path.join(log_path, f'train_rank_{rank}.log'))
+    fh.setLevel(logging.INFO)
+    
+    # Console handler (only for rank 0)
     if rank == 0:
-        handlers.append(logging.FileHandler(os.path.join(log_path, 'train_multi_gpu.log')))
-    handlers.append(logging.StreamHandler())
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+        logger.addHandler(ch)
     
-    logging.basicConfig(
-        format=f'[Rank {rank}] %(asctime)s | %(levelname)s | %(message)s',
-        level=logging.INFO,
-        handlers=handlers
-    )
+    # Formatter
+    formatter = logging.Formatter('%(asctime)s | %(levelname)s | [Rank %(name)s] %(message)s')
+    fh.setFormatter(formatter)
     
-    return logging.getLogger()
+    logger.addHandler(fh)
+    
+    return logger
 
 
 def set_seed(seed):
@@ -147,182 +160,195 @@ def set_seed(seed):
 
 def train_ddp(rank, world_size, args):
     """Training process for each GPU"""
-    # Set up distributed training
-    setup(rank, world_size)
-    
-    # Set seed
-    set_seed(args.seed + rank)
-    
-    # Set up logger
-    logger = setup_logger(args, rank)
-    if rank == 0:
-        logger.info(args)
-    
-    # Set device
-    torch.cuda.set_device(rank)
-    device = torch.device(f'cuda:{rank}')
-    logger.info(f'Process {rank} using device: {device}')
-    
-    # Load data (only rank 0 logs)
-    if rank == 0:
-        logger.info('Loading data...')
-    data_loader = DataLoaderOriginal(args, logger if rank == 0 else None)
-    
-    # Initialize model
-    if rank == 0:
-        logger.info('Initializing model...')
-    model = KGAT(
-        args,
-        data_loader.n_users,
-        data_loader.n_items,
-        data_loader.n_entities,
-        data_loader.n_relations,
-        data_loader.adjacency_dict['plain_adj'],
-        data_loader.laplacian_dict['kg_mat']
-    )
-    model = model.to(device)
-    
-    # Wrap model with DDP
-    model = DDP(model, device_ids=[rank], find_unused_parameters=True)
-    
-    if rank == 0:
-        logger.info(model)
-    
-    # Optimizer
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
-    
-    # Tensorboard (only rank 0)
-    writer = None
-    if rank == 0:
-        writer = SummaryWriter(f'runs/{args.dataset}_{args.model_type}_{args.alg_type}_multi_gpu')
-    
-    # Training loop
-    if rank == 0:
-        logger.info('Starting distributed training...')
-    
-    best_recall = 0.0
-    best_epoch = 0
-    
-    # Calculate batch size per GPU
-    cf_batch_size_per_gpu = args.cf_batch_size // world_size
-    
-    for epoch in range(args.epoch):
-        t1 = time()
+    try:
+        # Set up distributed training
+        setup(rank, world_size)
         
-        # Training
-        model.train()
+        # Set seed
+        set_seed(args.seed + rank)
         
-        # CF training
-        cf_total_loss = 0.0
-        n_cf_batch = data_loader.n_cf_train // args.cf_batch_size + 1
+        # Set up logger
+        logger = setup_logger(args, rank)
+        if rank == 0:
+            logger.info(args)
         
-        # Prepare user list
-        user_list = list(data_loader.train_user_dict.keys())
+        # Set device
+        torch.cuda.set_device(rank)
+        device = torch.device(f'cuda:{rank}')
+        logger.info(f'Process {rank} using device: {device}')
         
-        # Ensure each process gets different random shuffle
-        random.Random(args.seed + epoch + rank).shuffle(user_list)
+        # Load data (only rank 0 logs)
+        if rank == 0:
+            logger.info('Loading data...')
+        data_loader = DataLoaderOriginal(args, logger if rank == 0 else None)
         
-        # Distribute batches across GPUs
-        for iter in range(n_cf_batch):
-            # Each GPU processes its portion of the batch
-            start_idx = (iter * args.cf_batch_size + rank * cf_batch_size_per_gpu)
-            end_idx = min(start_idx + cf_batch_size_per_gpu, len(user_list))
-            
-            if start_idx >= len(user_list):
-                continue
-            
-            batch_user = user_list[start_idx:end_idx]
-            if len(batch_user) == 0:
-                continue
-            
-            batch_pos_item = []
-            batch_neg_item = []
-            
-            for u in batch_user:
-                pos_item = data_loader.sample_pos_items_for_u(u, 1)[0]
-                neg_item = data_loader.sample_neg_items_for_u(u, 1)[0]
-                batch_pos_item.append(pos_item)
-                batch_neg_item.append(neg_item)
-            
-            # Convert to tensors
-            batch_user = torch.LongTensor(batch_user).to(device)
-            batch_pos_item = torch.LongTensor(batch_pos_item).to(device)
-            batch_neg_item = torch.LongTensor(batch_neg_item).to(device)
-            
-            # Forward pass
-            u_embed, i_embed = model.module()
-            
-            u_embed = u_embed[batch_user]
-            pos_embed = i_embed[batch_pos_item]
-            neg_embed = i_embed[batch_neg_item]
-            
-            # Calculate loss
-            mf_loss, emb_loss, reg_loss = model.module.create_bpr_loss(
-                u_embed, pos_embed, neg_embed
-            )
-            loss = mf_loss + emb_loss + reg_loss
-            
-            # Backward pass
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            
-            cf_total_loss += loss.item()
+        # Initialize model
+        if rank == 0:
+            logger.info('Initializing model...')
+        model = KGAT(
+            args,
+            data_loader.n_users,
+            data_loader.n_items,
+            data_loader.n_entities,
+            data_loader.n_relations,
+            data_loader.adjacency_dict['plain_adj'],
+            data_loader.laplacian_dict['kg_mat']
+        )
+        model = model.to(device)
         
-        # Synchronize and aggregate loss across GPUs
-        cf_total_loss_tensor = torch.tensor(cf_total_loss).to(device)
-        dist.all_reduce(cf_total_loss_tensor, op=dist.ReduceOp.SUM)
-        cf_total_loss = cf_total_loss_tensor.item() / world_size
+        # Wrap model with DDP
+        model = DDP(model, device_ids=[rank], find_unused_parameters=True)
         
-        # Evaluation (only on rank 0)
-        if (epoch + 1) % 10 == 0 and rank == 0:
-            model.eval()
+        if rank == 0:
+            logger.info(model)
+        
+        # Optimizer
+        optimizer = optim.Adam(model.parameters(), lr=args.lr)
+        
+        # Tensorboard (only rank 0)
+        writer = None
+        if rank == 0:
+            writer = SummaryWriter(f'runs/{args.dataset}_{args.model_type}_{args.alg_type}_multi_gpu')
+        
+        # Training loop
+        if rank == 0:
+            logger.info('Starting distributed training...')
+        
+        best_recall = 0.0
+        best_epoch = 0
+        
+        # Calculate batch size per GPU
+        cf_batch_size_per_gpu = args.cf_batch_size // world_size
+        
+        for epoch in range(args.epoch):
+            t1 = time()
             
-            with torch.no_grad():
+            # Training
+            model.train()
+            
+            # CF training
+            cf_total_loss = 0.0
+            n_cf_batch = data_loader.n_cf_train // args.cf_batch_size + 1
+            
+            # Prepare user list
+            user_list = list(data_loader.train_user_dict.keys())
+            
+            # Ensure each process gets different random shuffle
+            random.Random(args.seed + epoch + rank).shuffle(user_list)
+            
+            # Distribute batches across GPUs
+            for iter in range(n_cf_batch):
+                # Each GPU processes its portion of the batch
+                start_idx = (iter * args.cf_batch_size + rank * cf_batch_size_per_gpu)
+                end_idx = min(start_idx + cf_batch_size_per_gpu, len(user_list))
+                
+                if start_idx >= len(user_list):
+                    continue
+                
+                batch_user = user_list[start_idx:end_idx]
+                if len(batch_user) == 0:
+                    continue
+                
+                batch_pos_item = []
+                batch_neg_item = []
+                
+                for u in batch_user:
+                    pos_item = data_loader.sample_pos_items_for_u(u, 1)[0]
+                    neg_item = data_loader.sample_neg_items_for_u(u, 1)[0]
+                    batch_pos_item.append(pos_item)
+                    batch_neg_item.append(neg_item)
+                
+                # Convert to tensors
+                batch_user = torch.LongTensor(batch_user).to(device)
+                batch_pos_item = torch.LongTensor(batch_pos_item).to(device)
+                batch_neg_item = torch.LongTensor(batch_neg_item).to(device)
+                
+                # Forward pass
                 u_embed, i_embed = model.module()
                 
-                # Test
-                ret = test(
-                    model.module, data_loader, user_list[:5000],
-                    args.Ks, device
+                # 사용자 ID는 엔티티 공간에서 원래 공간으로 변환
+                batch_user_original = batch_user - data_loader.n_entities
+                
+                # 범위 체크
+                assert torch.all(batch_user_original >= 0) and torch.all(batch_user_original < data_loader.n_users), \
+                    f"User index out of range: {batch_user_original.min()}-{batch_user_original.max()}, n_users={data_loader.n_users}"
+                assert torch.all(batch_pos_item >= 0) and torch.all(batch_pos_item < data_loader.n_items), \
+                    f"Pos item index out of range: {batch_pos_item.min()}-{batch_pos_item.max()}, n_items={data_loader.n_items}"
+                assert torch.all(batch_neg_item >= 0) and torch.all(batch_neg_item < data_loader.n_items), \
+                    f"Neg item index out of range: {batch_neg_item.min()}-{batch_neg_item.max()}, n_items={data_loader.n_items}"
+                
+                u_embed = u_embed[batch_user_original]
+                pos_embed = i_embed[batch_pos_item]
+                neg_embed = i_embed[batch_neg_item]
+                
+                # Calculate loss
+                mf_loss, emb_loss, reg_loss = model.module.create_bpr_loss(
+                    u_embed, pos_embed, neg_embed
                 )
+                loss = mf_loss + emb_loss + reg_loss
                 
-                perf_str = 'Epoch %d [%.1fs]: train==[%.5f], recall=[%.5f, %.5f], ' \
-                          'precision=[%.5f, %.5f], hit=[%.5f, %.5f], ndcg=[%.5f, %.5f]' % \
-                          (epoch, time() - t1, cf_total_loss,
-                           ret['recall'][0], ret['recall'][-1],
-                           ret['precision'][0], ret['precision'][-1],
-                           ret['hit_ratio'][0], ret['hit_ratio'][-1],
-                           ret['ndcg'][0], ret['ndcg'][-1])
+                # Backward pass
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
                 
-                logger.info(perf_str)
+                cf_total_loss += loss.item()
+            
+            # Synchronize and aggregate loss across GPUs
+            cf_total_loss_tensor = torch.tensor(cf_total_loss).to(device)
+            dist.all_reduce(cf_total_loss_tensor, op=dist.ReduceOp.SUM)
+            cf_total_loss = cf_total_loss_tensor.item() / world_size
+            
+            # Evaluation (only on rank 0)
+            if (epoch + 1) % 10 == 0 and rank == 0:
+                model.eval()
                 
-                # Tensorboard logging
-                if writer:
-                    writer.add_scalar('Loss/train', cf_total_loss, epoch)
-                    writer.add_scalar('Eval/recall@20', ret['recall'][0], epoch)
-                    writer.add_scalar('Eval/ndcg@20', ret['ndcg'][0], epoch)
-                
-                # Save best model
-                if ret['recall'][0] > best_recall:
-                    best_recall = ret['recall'][0]
-                    best_epoch = epoch
+                with torch.no_grad():
+                    u_embed, i_embed = model.module()
                     
-                    if args.save_flag:
-                        save_path = f'models/{args.dataset}_{args.model_type}_{args.alg_type}_multi_gpu.pth'
-                        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                        torch.save(model.module.state_dict(), save_path)
-                        logger.info(f'Model saved to {save_path}')
+                    # Test
+                    ret = test(
+                        model.module, data_loader, user_list[:5000],
+                        args.Ks, device
+                    )
+                    
+                    perf_str = 'Epoch %d [%.1fs]: train==[%.5f], recall=[%.5f, %.5f], ' \
+                              'precision=[%.5f, %.5f], hit=[%.5f, %.5f], ndcg=[%.5f, %.5f]' % \
+                              (epoch, time() - t1, cf_total_loss,
+                               ret['recall'][0], ret['recall'][-1],
+                               ret['precision'][0], ret['precision'][-1],
+                               ret['hit_ratio'][0], ret['hit_ratio'][-1],
+                               ret['ndcg'][0], ret['ndcg'][-1])
+                    
+                    logger.info(perf_str)
+                    
+                    # Tensorboard logging
+                    if writer:
+                        writer.add_scalar('Loss/train', cf_total_loss, epoch)
+                        writer.add_scalar('Eval/recall@20', ret['recall'][0], epoch)
+                        writer.add_scalar('Eval/ndcg@20', ret['ndcg'][0], epoch)
+                    
+                    # Save best model
+                    if ret['recall'][0] > best_recall:
+                        best_recall = ret['recall'][0]
+                        best_epoch = epoch
+                        
+                        if args.save_flag:
+                            save_path = f'models/{args.dataset}_{args.model_type}_{args.alg_type}_multi_gpu.pth'
+                            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                            torch.save(model.module.state_dict(), save_path)
+                            logger.info(f'Model saved to {save_path}')
+            
+            # Synchronize at the end of each epoch
+            dist.barrier()
         
-        # Synchronize at the end of each epoch
-        dist.barrier()
+        if rank == 0:
+            logger.info(f'Best recall@20: {best_recall:.5f} at epoch {best_epoch}')
+            if writer:
+                writer.close()
     
-    if rank == 0:
-        logger.info(f'Best recall@20: {best_recall:.5f} at epoch {best_epoch}')
-        if writer:
-            writer.close()
-    
-    cleanup()
+    finally:
+        cleanup()
 
 
 def main():
@@ -340,5 +366,5 @@ def main():
         mp.spawn(train_ddp, args=(world_size, args), nprocs=world_size, join=True)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
