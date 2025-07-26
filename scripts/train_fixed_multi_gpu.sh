@@ -34,13 +34,12 @@ echo "Fixed KGAT 모델 멀티 GPU 학습 시작..."
 echo "======================================"
 
 python src/train_improved.py \
-    +model.type=kgat_fixed \
-    +model.embedding_size=64 \
-    +model.layer_sizes=[64,32,16] \
-    +model.aggregator=bi \
-    +model.dropout_rates=[0.1,0.1,0.1] \
-    +model.weight_decay=1e-5 \
-    +model.batch_size=$BATCH_SIZE \
+    ++model.type=kgat_fixed \
+    ++model.embedding_size=64 \
+    ++model.layer_sizes=[64,32,16] \
+    model.aggregator=bi-interaction \
+    ++model.dropout_rates=[0.1,0.1,0.1] \
+    model.reg_weight=1e-5 \
     data.data_dir=$DATA_DIR \
     data.batch_size=$BATCH_SIZE \
     training.devices=$NUM_GPUS \
