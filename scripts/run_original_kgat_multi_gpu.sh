@@ -467,12 +467,8 @@ if __name__ == '__main__':
 EOF
     fi
     
-    # Launch distributed training
-    torchrun \
-        --nproc_per_node=$NUM_GPUS \
-        --master_addr=localhost \
-        --master_port=$MASTER_PORT \
-        src/train_original_multi_gpu.py \
+    # Launch distributed training using mp.spawn
+    python src/train_original_multi_gpu.py \
         --dataset $DATASET \
         --cf_batch_size $TOTAL_CF_BATCH_SIZE \
         --kg_batch_size $TOTAL_KG_BATCH_SIZE \
