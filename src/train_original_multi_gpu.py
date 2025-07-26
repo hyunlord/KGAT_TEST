@@ -1,5 +1,5 @@
 """
-원본 KGAT 논문의 학습 프로세스 재현
+Multi-GPU training script for original KGAT implementation using DistributedDataParallel
 """
 import os
 import sys
@@ -12,6 +12,10 @@ from time import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data.distributed import DistributedSampler
 from torch.utils.tensorboard import SummaryWriter
 
 from kgat_original import KGAT
@@ -20,16 +24,16 @@ from evaluate_original import test
 
 
 def parse_args():
-    """원본 논문의 하이퍼파라미터"""
-    parser = argparse.ArgumentParser(description="KGAT")
+    """Parse arguments with multi-GPU support"""
+    parser = argparse.ArgumentParser(description="KGAT Multi-GPU")
     
-    # 데이터셋
+    # Dataset
     parser.add_argument('--dataset', type=str, default='amazon-book',
                         help='dataset name: amazon-book, last-fm, yelp2018')
     parser.add_argument('--data_path', type=str, default='data/',
                         help='path of data directory')
     
-    # 모델
+    # Model
     parser.add_argument('--model_type', type=str, default='kgat',
                         help='model type: kgat, bprmf, fm, nfm, cke, cfkg')
     parser.add_argument('--adj_type', type=str, default='si',
@@ -37,7 +41,7 @@ def parse_args():
     parser.add_argument('--alg_type', type=str, default='bi',
                         help='algorithm type: bi, gcn, graphsage')
     
-    # 하이퍼파라미터 (원본 논문 값)
+    # Hyperparameters
     parser.add_argument('--embed_size', type=int, default=64,
                         help='embedding size')
     parser.add_argument('--layer_size', type=str, default='[64, 32, 16]',
@@ -47,11 +51,9 @@ def parse_args():
     parser.add_argument('--regs', nargs='?', default='[1e-5, 1e-5]',
                         help='regularization coefficients')
     
-    # 학습 설정
+    # Training settings
     parser.add_argument('--epoch', type=int, default=1000,
                         help='number of epochs')
-    parser.add_argument('--batch_size', type=int, default=1024,
-                        help='CF batch size')
     parser.add_argument('--cf_batch_size', type=int, default=1024,
                         help='CF batch size')
     parser.add_argument('--kg_batch_size', type=int, default=2048,
@@ -59,13 +61,13 @@ def parse_args():
     parser.add_argument('--test_batch_size', type=int, default=10000,
                         help='test batch size')
     
-    # 드롭아웃
+    # Dropout
     parser.add_argument('--node_dropout', nargs='?', default='[0.1]',
                         help='node dropout per layer')
     parser.add_argument('--mess_dropout', nargs='?', default='[0.1, 0.1, 0.1]',
                         help='message dropout per layer')
     
-    # 기타
+    # Evaluation
     parser.add_argument('--Ks', nargs='?', default='[20, 40, 60, 80, 100]',
                         help='k values for evaluation')
     parser.add_argument('--save_flag', type=int, default=1,
@@ -78,14 +80,18 @@ def parse_args():
                         help='use pretrained embeddings')
     parser.add_argument('--pretrain_embedding_dir', type=str, default='pretrain/',
                         help='pretrained embeddings directory')
-    parser.add_argument('--gpu_id', type=int, default=0,
-                        help='gpu id')
     parser.add_argument('--seed', type=int, default=2019,
                         help='random seed')
     
+    # Multi-GPU specific
+    parser.add_argument('--local_rank', type=int, default=-1,
+                        help='local rank for distributed training')
+    parser.add_argument('--gpu_id', type=int, default=0,
+                        help='gpu id (for single GPU)')
+    
     args = parser.parse_args()
     
-    # 문자열을 리스트로 변환
+    # Convert string to list
     args.layer_size = eval(args.layer_size)
     args.regs = eval(args.regs)
     args.node_dropout = eval(args.node_dropout)
@@ -95,26 +101,43 @@ def parse_args():
     return args
 
 
-def setup_logger(args):
-    """로거 설정"""
+def setup(rank, world_size):
+    """Initialize the distributed environment"""
+    os.environ['MASTER_ADDR'] = os.environ.get('MASTER_ADDR', 'localhost')
+    os.environ['MASTER_PORT'] = os.environ.get('MASTER_PORT', '29500')
+    
+    # Initialize the process group
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)
+
+
+def cleanup():
+    """Clean up the distributed environment"""
+    dist.destroy_process_group()
+
+
+def setup_logger(args, rank):
+    """Set up logger for distributed training"""
     log_path = os.path.join('logs', args.dataset)
     if not os.path.exists(log_path):
         os.makedirs(log_path)
     
+    # Only rank 0 writes to file
+    handlers = []
+    if rank == 0:
+        handlers.append(logging.FileHandler(os.path.join(log_path, 'train_multi_gpu.log')))
+    handlers.append(logging.StreamHandler())
+    
     logging.basicConfig(
-        format='%(asctime)s | %(levelname)s | %(message)s',
+        format=f'[Rank {rank}] %(asctime)s | %(levelname)s | %(message)s',
         level=logging.INFO,
-        handlers=[
-            logging.FileHandler(os.path.join(log_path, 'train.log')),
-            logging.StreamHandler()
-        ]
+        handlers=handlers
     )
     
     return logging.getLogger()
 
 
 def set_seed(seed):
-    """랜덤 시드 설정"""
+    """Set random seed"""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -122,25 +145,32 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
 
 
-def train(args):
-    """학습 프로세스"""
-    # 시드 설정
-    set_seed(args.seed)
+def train_ddp(rank, world_size, args):
+    """Training process for each GPU"""
+    # Set up distributed training
+    setup(rank, world_size)
     
-    # 로거 설정
-    logger = setup_logger(args)
-    logger.info(args)
+    # Set seed
+    set_seed(args.seed + rank)
     
-    # GPU 설정
-    device = torch.device(f'cuda:{args.gpu_id}' if torch.cuda.is_available() else 'cpu')
-    logger.info(f'Device: {device}')
+    # Set up logger
+    logger = setup_logger(args, rank)
+    if rank == 0:
+        logger.info(args)
     
-    # 데이터 로드
-    logger.info('Loading data...')
-    data_loader = DataLoaderOriginal(args, logger)
+    # Set device
+    torch.cuda.set_device(rank)
+    device = torch.device(f'cuda:{rank}')
+    logger.info(f'Process {rank} using device: {device}')
     
-    # 모델 초기화
-    logger.info('Initializing model...')
+    # Load data (only rank 0 logs)
+    if rank == 0:
+        logger.info('Loading data...')
+    data_loader = DataLoaderOriginal(args, logger if rank == 0 else None)
+    
+    # Initialize model
+    if rank == 0:
+        logger.info('Initializing model...')
     model = KGAT(
         args,
         data_loader.n_users,
@@ -152,37 +182,59 @@ def train(args):
     )
     model = model.to(device)
     
-    logger.info(model)
+    # Wrap model with DDP
+    model = DDP(model, device_ids=[rank], find_unused_parameters=True)
     
-    # 옵티마이저
+    if rank == 0:
+        logger.info(model)
+    
+    # Optimizer
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     
-    # Tensorboard
-    writer = SummaryWriter(f'runs/{args.dataset}_{args.model_type}_{args.alg_type}')
+    # Tensorboard (only rank 0)
+    writer = None
+    if rank == 0:
+        writer = SummaryWriter(f'runs/{args.dataset}_{args.model_type}_{args.alg_type}_multi_gpu')
     
-    # 학습 루프
-    logger.info('Starting training...')
+    # Training loop
+    if rank == 0:
+        logger.info('Starting distributed training...')
     
     best_recall = 0.0
     best_epoch = 0
     
+    # Calculate batch size per GPU
+    cf_batch_size_per_gpu = args.cf_batch_size // world_size
+    
     for epoch in range(args.epoch):
         t1 = time()
         
-        # 학습
+        # Training
         model.train()
         
-        # CF 부분 학습
+        # CF training
         cf_total_loss = 0.0
         n_cf_batch = data_loader.n_cf_train // args.cf_batch_size + 1
         
-        # 사용자 리스트 준비
+        # Prepare user list
         user_list = list(data_loader.train_user_dict.keys())
-        random.shuffle(user_list)
         
+        # Ensure each process gets different random shuffle
+        random.Random(args.seed + epoch + rank).shuffle(user_list)
+        
+        # Distribute batches across GPUs
         for iter in range(n_cf_batch):
-            # 배치 준비
-            batch_user = user_list[iter * args.cf_batch_size:(iter + 1) * args.cf_batch_size]
+            # Each GPU processes its portion of the batch
+            start_idx = (iter * args.cf_batch_size + rank * cf_batch_size_per_gpu)
+            end_idx = min(start_idx + cf_batch_size_per_gpu, len(user_list))
+            
+            if start_idx >= len(user_list):
+                continue
+            
+            batch_user = user_list[start_idx:end_idx]
+            if len(batch_user) == 0:
+                continue
+            
             batch_pos_item = []
             batch_neg_item = []
             
@@ -192,52 +244,46 @@ def train(args):
                 batch_pos_item.append(pos_item)
                 batch_neg_item.append(neg_item)
             
-            # 텐서로 변환
+            # Convert to tensors
             batch_user = torch.LongTensor(batch_user).to(device)
             batch_pos_item = torch.LongTensor(batch_pos_item).to(device)
             batch_neg_item = torch.LongTensor(batch_neg_item).to(device)
             
-            # Forward
-            u_embed, i_embed = model()
+            # Forward pass
+            u_embed, i_embed = model.module()
             
-            # 사용자 ID는 엔티티 공간에서 원래 공간으로 변환
-            batch_user_original = batch_user - data_loader.n_entities
-            
-            # 범위 체크
-            assert torch.all(batch_user_original >= 0) and torch.all(batch_user_original < data_loader.n_users), \
-                f"User index out of range: {batch_user_original.min()}-{batch_user_original.max()}, n_users={data_loader.n_users}"
-            assert torch.all(batch_pos_item >= 0) and torch.all(batch_pos_item < data_loader.n_items), \
-                f"Pos item index out of range: {batch_pos_item.min()}-{batch_pos_item.max()}, n_items={data_loader.n_items}"
-            assert torch.all(batch_neg_item >= 0) and torch.all(batch_neg_item < data_loader.n_items), \
-                f"Neg item index out of range: {batch_neg_item.min()}-{batch_neg_item.max()}, n_items={data_loader.n_items}"
-            
-            u_embed = u_embed[batch_user_original]
+            u_embed = u_embed[batch_user]
             pos_embed = i_embed[batch_pos_item]
             neg_embed = i_embed[batch_neg_item]
             
-            # Loss 계산
-            mf_loss, emb_loss, reg_loss = model.create_bpr_loss(
+            # Calculate loss
+            mf_loss, emb_loss, reg_loss = model.module.create_bpr_loss(
                 u_embed, pos_embed, neg_embed
             )
             loss = mf_loss + emb_loss + reg_loss
             
-            # Backward
+            # Backward pass
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             
             cf_total_loss += loss.item()
         
-        # 평가
-        if (epoch + 1) % 10 == 0:
+        # Synchronize and aggregate loss across GPUs
+        cf_total_loss_tensor = torch.tensor(cf_total_loss).to(device)
+        dist.all_reduce(cf_total_loss_tensor, op=dist.ReduceOp.SUM)
+        cf_total_loss = cf_total_loss_tensor.item() / world_size
+        
+        # Evaluation (only on rank 0)
+        if (epoch + 1) % 10 == 0 and rank == 0:
             model.eval()
             
             with torch.no_grad():
-                u_embed, i_embed = model()
+                u_embed, i_embed = model.module()
                 
-                # 테스트
+                # Test
                 ret = test(
-                    model, data_loader, user_list[:5000],  # 일부만 테스트
+                    model.module, data_loader, user_list[:5000],
                     args.Ks, device
                 )
                 
@@ -251,26 +297,48 @@ def train(args):
                 
                 logger.info(perf_str)
                 
-                # Tensorboard 로깅
-                writer.add_scalar('Loss/train', cf_total_loss, epoch)
-                writer.add_scalar('Eval/recall@20', ret['recall'][0], epoch)
-                writer.add_scalar('Eval/ndcg@20', ret['ndcg'][0], epoch)
+                # Tensorboard logging
+                if writer:
+                    writer.add_scalar('Loss/train', cf_total_loss, epoch)
+                    writer.add_scalar('Eval/recall@20', ret['recall'][0], epoch)
+                    writer.add_scalar('Eval/ndcg@20', ret['ndcg'][0], epoch)
                 
-                # Best model 저장
+                # Save best model
                 if ret['recall'][0] > best_recall:
                     best_recall = ret['recall'][0]
                     best_epoch = epoch
                     
                     if args.save_flag:
-                        save_path = f'models/{args.dataset}_{args.model_type}_{args.alg_type}.pth'
+                        save_path = f'models/{args.dataset}_{args.model_type}_{args.alg_type}_multi_gpu.pth'
                         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                        torch.save(model.state_dict(), save_path)
+                        torch.save(model.module.state_dict(), save_path)
                         logger.info(f'Model saved to {save_path}')
+        
+        # Synchronize at the end of each epoch
+        dist.barrier()
     
-    logger.info(f'Best recall@20: {best_recall:.5f} at epoch {best_epoch}')
-    writer.close()
+    if rank == 0:
+        logger.info(f'Best recall@20: {best_recall:.5f} at epoch {best_epoch}')
+        if writer:
+            writer.close()
+    
+    cleanup()
+
+
+def main():
+    args = parse_args()
+    
+    # Get world size from environment
+    world_size = int(os.environ.get('WORLD_SIZE', 1))
+    
+    if world_size == 1:
+        # Single GPU training - use original script
+        print("Single GPU training detected. Use train_original.py instead.")
+        sys.exit(1)
+    else:
+        # Multi-GPU training
+        mp.spawn(train_ddp, args=(world_size, args), nprocs=world_size, join=True)
 
 
 if __name__ == '__main__':
-    args = parse_args()
-    train(args)
+    main()

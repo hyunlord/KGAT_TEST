@@ -141,7 +141,9 @@ def test(model, data_loader, user_list, Ks, device):
         pos_test_items = data_loader.test_user_dict[u]
         
         # 추천 점수 계산
-        u_embedding = u_embed[u]
+        # 사용자 ID는 엔티티 공간에서 원래 공간으로 변환
+        u_original = u - data_loader.n_entities
+        u_embedding = u_embed[u_original]
         scores = torch.matmul(u_embedding, i_embed.t()).cpu().numpy()
         
         # 학습에서 본 아이템들은 제외
