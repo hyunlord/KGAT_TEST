@@ -23,15 +23,15 @@ class KGAT(nn.Module):
         
         # 원본 설정
         self.emb_size = args.embed_size  # 64
-        self.layer_size = eval(args.layer_size)  # [64, 32, 16]
+        self.layer_size = args.layer_size if isinstance(args.layer_size, list) else eval(args.layer_size)  # [64, 32, 16]
         self.n_layers = len(self.layer_size)
         self.alg_type = args.alg_type  # 'bi', 'gcn', 'graphsage'
         
         self.model_type = args.model_type
         self.adj_type = args.adj_type  # 'si' or 'bi'
         
-        self.node_dropout = eval(args.node_dropout)  # [0.1]
-        self.mess_dropout = eval(args.mess_dropout)  # [0.1, 0.1, 0.1]
+        self.node_dropout = args.node_dropout if isinstance(args.node_dropout, list) else eval(args.node_dropout)  # [0.1]
+        self.mess_dropout = args.mess_dropout if isinstance(args.mess_dropout, list) else eval(args.mess_dropout)  # [0.1, 0.1, 0.1]
         
         self.reg_lambda = args.regs[0]
         self.reg_lambda2 = args.regs[1]
@@ -101,8 +101,8 @@ class KGAT(nn.Module):
         else:  # 'si'
             # D^{-1} * A
             rowsum = np.array(adj.sum(1))
-            d_inv = np.power(rowsum, -1).flatten()
-            d_inv[np.isinf(d_inv)] = 0.
+            d_inv = np.zeros_like(rowsum, dtype=np.float32).flatten()
+            d_inv[rowsum > 0] = np.power(rowsum[rowsum > 0], -1).flatten()
             d_mat_inv = sp.diags(d_inv)
             norm_adj = d_mat_inv.dot(adj)
         

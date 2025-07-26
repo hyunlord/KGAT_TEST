@@ -167,8 +167,9 @@ class DataLoaderOriginal(object):
             """Simple normalized Laplacian"""
             rowsum = np.array(adj.sum(1))
             
-            d_inv = np.power(rowsum, -1).flatten()
-            d_inv[np.isinf(d_inv)] = 0.
+            # Avoid divide by zero warning
+            d_inv = np.zeros_like(rowsum, dtype=np.float32).flatten()
+            d_inv[rowsum > 0] = np.power(rowsum[rowsum > 0], -1).flatten()
             d_mat_inv = sp.diags(d_inv)
             
             norm_adj = d_mat_inv.dot(adj)
