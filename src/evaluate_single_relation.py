@@ -81,6 +81,10 @@ class SingleRelationRecommender:
         with torch.no_grad():
             u_embed, i_embed = self.model()
             
+            # 원본 임베딩 (관계 임베딩과 동일 차원)
+            u_embed_base = self.model.user_embed
+            i_embed_base = self.model.entity_embed[:self.data_loader.n_items]
+            
             recommendations = {}
             relation_stats = {
                 'users_with_paths': 0,
@@ -90,7 +94,8 @@ class SingleRelationRecommender:
             
             for u in user_ids:
                 u_original = u - self.data_loader.n_entities
-                user_emb = u_embed[u_original]
+                user_emb_full = u_embed[u_original]  # 전체 임베딩 (concat된 것)
+                user_emb_base = u_embed_base[u_original]  # 기본 임베딩
                 
                 # 관계 기반 점수만 계산
                 relation_scores = torch.zeros(self.data_loader.n_items).to(self.device)
@@ -107,11 +112,11 @@ class SingleRelationRecommender:
                                     # relation 임베딩
                                     rel_emb = self.model.relation_embed[r]
                                     
-                                    # user + relation 결합
-                                    enhanced_user = user_emb + rel_emb
+                                    # user + relation 결합 (같은 차원)
+                                    enhanced_user = user_emb_base + rel_emb
                                     
-                                    # 타겟 아이템과의 유사도
-                                    target_emb = i_embed[target]
+                                    # 타겟 아이템과의 유사도 (기본 임베딩 사용)
+                                    target_emb = i_embed_base[target]
                                     score = torch.dot(enhanced_user, target_emb)
                                     
                                     relation_scores[target] += score
@@ -123,7 +128,10 @@ class SingleRelationRecommender:
                 
                 # 최종 점수 계산
                 if use_base_score:
-                    base_scores = torch.matmul(user_emb, i_embed.t())
+                    # 전체 임베딩으로 기본 점수 계산
+                    # i_embed에서 아이템만 추출
+                    item_embed_full = i_embed[:self.data_loader.n_items]
+                    base_scores = torch.matmul(user_emb_full, item_embed_full.t())
                     final_scores = base_weight * base_scores + (1 - base_weight) * relation_scores
                 else:
                     final_scores = relation_scores
@@ -255,7 +263,9 @@ class SingleRelationRecommender:
                 u_original = u - self.data_loader.n_entities
                 user_emb = u_embed[u_original]
                 
-                scores = torch.matmul(user_emb, i_embed.t())
+                # i_embed에서 아이템만 추출
+                item_embed = i_embed[:self.data_loader.n_items]
+                scores = torch.matmul(user_emb, item_embed.t())
                 
                 if u in self.data_loader.train_user_dict:
                     train_items = self.data_loader.train_user_dict[u]

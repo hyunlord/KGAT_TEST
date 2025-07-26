@@ -63,12 +63,19 @@ class RelationAwareComparison:
         with torch.no_grad():
             u_embed, i_embed = self.model()
             
+            # 원본 임베딩 (관계 임베딩과 동일 차원)
+            u_embed_base = self.model.user_embed
+            i_embed_base = self.model.entity_embed[:self.data_loader.n_items]
+            
             recommendations = {}
             for u in user_ids:
                 u_original = u - self.data_loader.n_entities
-                user_emb = u_embed[u_original]
+                user_emb_full = u_embed[u_original]  # 전체 임베딩
+                user_emb_base = u_embed_base[u_original]  # 기본 임베딩
                 
-                scores = torch.matmul(user_emb, i_embed.t())
+                # i_embed에서 아이템만 추출
+                item_embed = i_embed[:self.data_loader.n_items]
+                scores = torch.matmul(user_emb_full, item_embed.t())
                 
                 if u in self.data_loader.train_user_dict:
                     train_items = self.data_loader.train_user_dict[u]
@@ -124,14 +131,17 @@ class RelationAwareComparison:
                                     
                                     # 관계별 가중치 적용
                                     weight = relation_weights.get(relation, 1.0)
-                                    enhanced_user = user_emb + weight * rel_emb
+                                    enhanced_user = user_emb_base + weight * rel_emb  # 같은 차원
                                     
-                                    target_emb = i_embed[target]
+                                    target_emb = i_embed_base[target]  # 기본 임베딩 사용
                                     score = torch.dot(enhanced_user, target_emb)
                                     
                                     enhanced_scores[target] += score
                 
                 # 최종 점수 결합
+                # i_embed에서 아이템만 추출
+                item_embed = i_embed[:self.data_loader.n_items]
+                base_scores = torch.matmul(user_emb_full, item_embed.t())
                 final_scores = base_scores + 0.3 * enhanced_scores
                 
                 # 이미 본 아이템 제외
