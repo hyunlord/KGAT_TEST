@@ -97,6 +97,8 @@ def train(cfg: DictConfig):
     
     # Create model
     if model_type == 'kgat_fixed':
+        # Fixed 모델에 batch_size 추가
+        cfg.model.batch_size = cfg.data.batch_size
         model = KGATLightningFixed(cfg.model)
     elif use_improved:
         model = KGATImproved(cfg.model)

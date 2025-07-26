@@ -40,16 +40,16 @@ python src/train_improved.py \
     model.aggregator=bi-interaction \
     ++model.dropout_rates=[0.1,0.1,0.1] \
     model.reg_weight=1e-5 \
+    model.lr=0.0001 \
     data.data_dir=$DATA_DIR \
     data.batch_size=$BATCH_SIZE \
+    data.num_workers=4 \
     training.devices=$NUM_GPUS \
     training.strategy=$STRATEGY \
     training.precision=16 \
     training.max_epochs=1000 \
     training.check_val_every_n_epoch=10 \
-    training.early_stopping_patience=50 \
-    model.lr=0.0001 \
-    data.num_workers=4
+    training.early_stopping_patience=50
 
 echo ""
 echo "학습 완료!"

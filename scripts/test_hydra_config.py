@@ -37,8 +37,8 @@ def main():
          "기본 설정"),
         
         # Fixed 모델 (수정된 버전)
-        ("python src/train_improved.py ++model.type=kgat_fixed model.aggregator=bi-interaction --cfg job",
-         "Fixed 모델 설정"),
+        ("python src/train_improved.py ++model.type=kgat_fixed ++model.embedding_size=64 ++model.layer_sizes=[64,32,16] model.aggregator=bi-interaction model.reg_weight=1e-5 model.lr=0.0001 --cfg job",
+         "Fixed 모델 전체 설정"),
         
         # 멀티 GPU
         ("python src/train_improved.py training.devices=4 training.strategy=ddp --cfg job",

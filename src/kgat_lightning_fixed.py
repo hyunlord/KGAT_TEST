@@ -78,7 +78,7 @@ class KGATLightningFixed(pl.LightningModule):
         
         self.lr = config.lr
         self.weight_decay = config.reg_weight  # config에서 reg_weight 사용
-        self.batch_size = config.batch_size
+        self.batch_size = getattr(config, 'batch_size', 1024)  # 기본값 1024
         
         # 임베딩 레이어 (원본과 동일한 초기화)
         self.user_embedding = nn.Embedding(self.n_users, self.embedding_size)
