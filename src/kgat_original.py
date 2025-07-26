@@ -93,16 +93,17 @@ class KGAT(nn.Module):
         
         if adj_type == 'bi':
             # D^{-1/2} * A * D^{-1/2}
-            rowsum = np.array(adj.sum(1))
-            d_inv_sqrt = np.power(rowsum, -0.5).flatten()
+            rowsum = np.array(adj.sum(1)).flatten()
+            d_inv_sqrt = np.power(rowsum, -0.5)
             d_inv_sqrt[np.isinf(d_inv_sqrt)] = 0.
             d_mat_inv_sqrt = sp.diags(d_inv_sqrt)
             norm_adj = d_mat_inv_sqrt.dot(adj).dot(d_mat_inv_sqrt)
         else:  # 'si'
             # D^{-1} * A
-            rowsum = np.array(adj.sum(1))
-            d_inv = np.zeros_like(rowsum, dtype=np.float32).flatten()
-            d_inv[rowsum > 0] = np.power(rowsum[rowsum > 0], -1).flatten()
+            rowsum = np.array(adj.sum(1)).flatten()
+            d_inv = np.zeros_like(rowsum, dtype=np.float32)
+            mask = rowsum > 0
+            d_inv[mask] = np.power(rowsum[mask], -1)
             d_mat_inv = sp.diags(d_inv)
             norm_adj = d_mat_inv.dot(adj)
         

@@ -154,9 +154,9 @@ class DataLoaderOriginal(object):
         # user-item 상호작용을 위한 행렬
         def _bi_norm_lap(adj):
             """Bi-normalized Laplacian"""
-            rowsum = np.array(adj.sum(1))
+            rowsum = np.array(adj.sum(1)).flatten()  # flatten to 1D
             
-            d_inv_sqrt = np.power(rowsum, -0.5).flatten()
+            d_inv_sqrt = np.power(rowsum, -0.5)
             d_inv_sqrt[np.isinf(d_inv_sqrt)] = 0.
             d_mat_inv_sqrt = sp.diags(d_inv_sqrt)
             
@@ -165,11 +165,12 @@ class DataLoaderOriginal(object):
         
         def _si_norm_lap(adj):
             """Simple normalized Laplacian"""
-            rowsum = np.array(adj.sum(1))
+            rowsum = np.array(adj.sum(1)).flatten()  # flatten to 1D
             
             # Avoid divide by zero warning
-            d_inv = np.zeros_like(rowsum, dtype=np.float32).flatten()
-            d_inv[rowsum > 0] = np.power(rowsum[rowsum > 0], -1).flatten()
+            d_inv = np.zeros_like(rowsum, dtype=np.float32)
+            mask = rowsum > 0
+            d_inv[mask] = np.power(rowsum[mask], -1)
             d_mat_inv = sp.diags(d_inv)
             
             norm_adj = d_mat_inv.dot(adj)
