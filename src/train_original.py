@@ -149,7 +149,8 @@ def train(args):
         data_loader.n_relations,
         data_loader.adjacency_dict['plain_adj'],
         data_loader.laplacian_dict['kg_mat']
-    ).to(device)
+    )
+    model = model.to(device)
     
     logger.info(model)
     

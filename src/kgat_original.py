@@ -79,13 +79,16 @@ class KGAT(nn.Module):
                 kg_mat, self.adj_type
             )
         
+        # 디바이스 설정을 위한 더미 파라미터 등록
+        self.register_buffer('device_holder', torch.zeros(1))
+        
     def _convert_sp_mat_to_sp_tensor(self, X):
         """Scipy sparse matrix를 PyTorch sparse tensor로 변환"""
         coo = X.tocoo().astype(np.float32)
         indices = torch.LongTensor(np.vstack((coo.row, coo.col)))
         values = torch.FloatTensor(coo.data)
         shape = torch.Size(coo.shape)
-        return torch.sparse.FloatTensor(indices, values, shape)
+        return torch.sparse_coo_tensor(indices, values, shape, dtype=torch.float32)
     
     def _compute_normalized_laplacian(self, adj, adj_type):
         """정규화된 Laplacian 계산"""
@@ -130,6 +133,11 @@ class KGAT(nn.Module):
         # 사용자와 엔티티 임베딩 결합
         ego_embed = torch.cat([self.user_embed, self.entity_embed], dim=0)
         all_embed = [ego_embed]
+        
+        # sparse tensor를 올바른 디바이스로 이동
+        device = ego_embed.device
+        if self.A_in.device != device:
+            self.A_in = self.A_in.to(device)
         
         # 각 레이어별로 메시지 전파
         for k in range(self.n_layers):
