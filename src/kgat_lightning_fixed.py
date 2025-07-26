@@ -14,7 +14,7 @@ class KGATConv(MessagePassing):
     """원본 KGAT의 aggregation 방식을 따르는 convolution layer"""
     
     def __init__(self, in_channels, out_channels, aggregator_type='bi', dropout=0.1):
-        super(KGATConv, self).__init__(aggr='add')
+        super(KGATConv, self).__init__(aggr='add', node_dim=0)  # node_dim 명시
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.aggregator_type = aggregator_type
@@ -32,8 +32,13 @@ class KGATConv(MessagePassing):
         self.dropout_layer = nn.Dropout(dropout)
         
     def forward(self, x, edge_index, edge_weight=None):
+        # self-loop 추가 (PyTorch Geometric에서 자동 처리 방지)
+        edge_index_with_loops, edge_weight_with_loops = add_self_loops(
+            edge_index, edge_weight, num_nodes=x.size(0)
+        )
+        
         # 이웃 정보 수집
-        out = self.propagate(edge_index, x=x, edge_weight=edge_weight)
+        out = self.propagate(edge_index_with_loops, x=x, edge_weight=edge_weight_with_loops)
         
         if self.aggregator_type == 'bi':
             # Bi-interaction: element-wise product
@@ -55,6 +60,10 @@ class KGATConv(MessagePassing):
     
     def message(self, x_j, edge_weight):
         if edge_weight is not None:
+            # edge_weight와 x_j의 크기가 맞는지 확인
+            if edge_weight.size(0) != x_j.size(0):
+                # 크기가 맞지 않으면 edge_weight 무시
+                return x_j
             return edge_weight.view(-1, 1) * x_j
         return x_j
 
@@ -73,7 +82,13 @@ class KGATLightningFixed(pl.LightningModule):
         
         self.embedding_size = config.embedding_size
         self.layer_sizes = config.layer_sizes
-        self.aggregator = config.aggregator
+        # aggregator 타입 변환 (bi-interaction -> bi)
+        aggregator_map = {
+            'bi-interaction': 'bi',
+            'gcn': 'gcn',
+            'graphsage': 'graphsage'
+        }
+        self.aggregator = aggregator_map.get(config.aggregator, config.aggregator)
         self.dropout_rates = config.dropout_rates
         
         self.lr = config.lr
@@ -112,12 +127,12 @@ class KGATLightningFixed(pl.LightningModule):
         
     def compute_edge_weights(self, edge_index, num_nodes):
         """원본 논문의 Laplacian normalization 구현"""
-        # Add self-loops
-        edge_index, _ = add_self_loops(edge_index, num_nodes=num_nodes)
+        # 주어진 edge에 대해서만 edge weight 계산
+        # (self-loop는 KGATConv forward에서 처리)
         
-        # Compute degree
+        # Compute degree (self-loop 포함하여 계산)
         row, col = edge_index
-        deg = torch.bincount(row, minlength=num_nodes).float()
+        deg = torch.bincount(row, minlength=num_nodes).float() + 1  # +1 for self-loop
         
         # Compute normalization: D^{-1/2}
         deg_inv_sqrt = deg.pow(-0.5)
@@ -172,13 +187,12 @@ class KGATLightningFixed(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         edge_index_ui = batch['edge_index_ui']
         
-        # Edge weight 계산 (첫 번째 배치에서만)
-        if self.edge_weight_ui is None:
-            num_nodes = self.n_users + self.n_entities
-            _, self.edge_weight_ui = self.compute_edge_weights(edge_index_ui, num_nodes)
+        # Edge weight 계산 (매번 새로 계산)
+        num_nodes = self.n_users + self.n_entities
+        _, edge_weight_ui = self.compute_edge_weights(edge_index_ui, num_nodes)
         
         # Forward pass
-        user_embeddings, item_embeddings = self(edge_index_ui, self.edge_weight_ui)
+        user_embeddings, item_embeddings = self(edge_index_ui, edge_weight_ui)
         
         # 배치에서 임베딩 추출
         users = user_embeddings[batch['user_ids']]
