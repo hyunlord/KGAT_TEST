@@ -82,7 +82,12 @@ class RelationEnhancedComparisonAll:
                 user_emb = u_embed[u_original]
                 
                 # 모든 아이템과의 점수 계산
-                scores = torch.matmul(user_emb, i_embed.t())
+                # Original의 경우 i_embed에서 아이템만 추출
+                if self.model_type == 'original':
+                    item_embed = i_embed[:self.data_loader.n_items]
+                    scores = torch.matmul(user_emb, item_embed.t())
+                else:
+                    scores = torch.matmul(user_emb, i_embed.t())
                 
                 # 이미 본 아이템 제외
                 if u in self.data_loader.train_user_dict:
@@ -171,7 +176,12 @@ class RelationEnhancedComparisonAll:
                 
                 # 기본 점수와 관계 강화 점수 결합 (전체 임베딩 사용)
                 user_emb_full = u_embed[u_original]
-                base_scores = torch.matmul(user_emb_full, i_embed.t())
+                if self.model_type == 'original':
+                    # Original: i_embed에서 아이템만 추출
+                    item_embed_full = i_embed[:self.data_loader.n_items]
+                    base_scores = torch.matmul(user_emb_full, item_embed_full.t())
+                else:
+                    base_scores = torch.matmul(user_emb_full, i_embed.t())
                 final_scores = base_scores + 0.3 * enhanced_scores  # 가중치 조절 가능
                 
                 # 이미 본 아이템 제외
